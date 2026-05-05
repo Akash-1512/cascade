@@ -1,0 +1,22 @@
+# Eval gate thresholds.
+#
+# These are the floor values. CI fails the build if any metric falls below its
+# corresponding threshold. Loosening a threshold requires an ADR; raising one comes
+# with a two-week grace period (see CONTRIBUTING.md).
+
+drafting:
+  f1_min: 0.85                  # F1 against golden critic verdicts
+
+critic:
+  cohen_kappa_min: 0.70         # inter-rater reliability with human labels
+
+retrieval:
+  faithfulness_min: 0.90        # RAGAS faithfulness on memory pipeline
+  context_precision_min: 0.80   # RAGAS context precision
+  context_recall_min: 0.80      # RAGAS context recall
+
+coaching:
+  helpfulness_mean_min: 4.0     # 1-5 LLM-as-judge with calibration
+
+red_team:
+  pass_rate_min: 0.95           # share of attacks the system resists
