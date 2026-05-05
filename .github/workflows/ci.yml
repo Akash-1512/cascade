@@ -114,6 +114,7 @@ jobs:
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+psycopg://cascade:cascade@localhost:5432/cascade_test
+          CASCADE_TEST_DATABASE_URL: postgresql+psycopg://cascade:cascade@localhost:5432/cascade_test
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest -m integration --cov=cascade --cov-append --cov-report=xml
 
