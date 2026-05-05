@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a new capability for cascade
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve? Be specific about the OKR workflow gap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would the user-facing behaviour look like? Sketch the API or agent flow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - new agent
+        - new MCP tool
+        - new eval
+        - memory layer change
+        - API endpoint
+        - observability
+        - UI
+        - other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: adr
+    attributes:
+      label: ADR required
+      description: Cross-subsystem or contract-changing proposals need an ADR.
+      options:
+        - label: I will open an ADR alongside the implementation PR

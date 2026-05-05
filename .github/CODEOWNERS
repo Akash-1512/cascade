@@ -1,0 +1,9 @@
+# Default owner for everything in the repo
+* @Akash-1512
+
+# Critical paths require owner review
+/.github/        @Akash-1512
+/cascade/agents/ @Akash-1512
+/cascade/memory/ @Akash-1512
+/cascade/mcp/    @Akash-1512
+/cascade/evals/  @Akash-1512
