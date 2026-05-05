@@ -4,4 +4,4 @@ Read by ``pyproject.toml`` (via hatch dynamic metadata in future versions) and b
 running application for ``/health`` and structured-log enrichment.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
