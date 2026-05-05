@@ -1,0 +1,73 @@
+name: Eval gate
+
+# Runs the regression eval suite on PRs that touch agent or eval code.
+# Fails the build if quality scores drop below thresholds defined in
+# eval_data/thresholds.yaml — see docs/architecture/evals.md for rationale.
+
+on:
+  pull_request:
+    paths:
+      - "cascade/agents/**"
+      - "cascade/memory/**"
+      - "cascade/evals/**"
+      - "eval_data/**"
+      - ".github/workflows/eval-gate.yml"
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  eval-gate:
+    name: Run eval suite and check thresholds
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install package
+        run: pip install -e ".[dev,evals]"
+
+      - name: Run eval suite
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: python -m cascade.evals.gate --output eval_results.json
+
+      - name: Check thresholds
+        run: python -m cascade.evals.check_thresholds eval_results.json
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: eval_results.json
+          retention-days: 30
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('eval_results.json')) return;
+            const results = JSON.parse(fs.readFileSync('eval_results.json', 'utf8'));
+            const lines = ['### Eval gate results', '', '| Metric | Score | Threshold | Status |', '|---|---|---|---|'];
+            for (const [name, r] of Object.entries(results.metrics || {})) {
+              const status = r.passed ? ':white_check_mark:' : ':x:';
+              lines.push(`| ${name} | ${r.score.toFixed(3)} | ${r.threshold.toFixed(3)} | ${status} |`);
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: lines.join('\n'),
+            });
