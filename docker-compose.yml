@@ -1,0 +1,91 @@
+name: cascade
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cascade-postgres
+    environment:
+      POSTGRES_USER: cascade
+      POSTGRES_PASSWORD: cascade
+      POSTGRES_DB: cascade
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cascade"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    container_name: cascade-chromadb
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cascade-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+psycopg://cascade:cascade@postgres:5432/cascade
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cascade-mcp
+    command: ["python", "-m", "cascade.mcp.server"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+psycopg://cascade:cascade@postgres:5432/cascade
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+    env_file:
+      - .env
+    ports:
+      - "8765:8765"
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cascade-ui
+    command: ["streamlit", "run", "cascade/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    depends_on:
+      - api
+    environment:
+      CASCADE_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  chromadb_data:
