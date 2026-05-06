@@ -16,6 +16,19 @@ cascade helps teams that already run OKRs do three things existing tools don't:
 
 cascade exposes its capabilities over the **Model Context Protocol**, so the same data is queryable from Claude Desktop, Cursor, or any MCP-aware client.
 
+## MCP
+
+Eight tools are exposed: `list_okrs`, `get_okr`, `draft_okr`, `score_okr`,
+`log_checkin`, `query_decisions`, `assess_risk`, `get_alignment`. See
+[`docs/runbooks/mcp-server.md`](docs/runbooks/mcp-server.md) for client
+configuration and examples.
+
+```bash
+python -m cascade.mcp.server                          # stdio (for Claude Desktop)
+python -m cascade.mcp.server --transport sse          # SSE
+python -m cascade.mcp.server --transport streamable-http  # production
+```
+
 ## Status
 
 Pre-release. See [CHANGELOG.md](CHANGELOG.md) for the roadmap to v1.0.
