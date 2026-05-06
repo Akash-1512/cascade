@@ -13,10 +13,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from cascade.agents.contracts import (
+    AlignmentResult,
     CritiqueResult,
     DraftIteration,
     HumanInterrupt,
     ProposedObjective,
+    RiskAssessment,
 )
 from cascade.domain.okr import Objective
 
@@ -45,12 +47,15 @@ class OKRState(BaseModel):
     # Inputs --------------------------------------------------------------
     intent: Annotated[str, _replace] = ""
     parent_objective: Annotated[Objective | None, _replace] = None
+    peer_objectives: Annotated[list[Objective], _replace] = Field(default_factory=list)
     actor_id: Annotated[UUID | None, _replace] = None
     trace_id: Annotated[str, _replace] = ""
 
     # Working state -------------------------------------------------------
     proposal: Annotated[ProposedObjective | None, _replace] = None
     critique: Annotated[CritiqueResult | None, _replace] = None
+    alignment: Annotated[AlignmentResult | None, _replace] = None
+    risk: Annotated[RiskAssessment | None, _replace] = None
     iterations: Annotated[list[DraftIteration], _append] = Field(default_factory=list)
 
     # Routing -------------------------------------------------------------

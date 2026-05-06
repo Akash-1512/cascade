@@ -6,6 +6,7 @@ import pytest
 from langgraph.graph import END
 
 from cascade.agents.contracts import (
+    AlignmentResult,
     CritiqueResult,
     DimensionScore,
     DraftIteration,
@@ -61,9 +62,54 @@ def test_supervisor_routes_to_critic_when_proposal_present() -> None:
 
 
 @pytest.mark.unit
-def test_supervisor_ends_on_pass() -> None:
+def test_supervisor_routes_to_aligner_on_pass() -> None:
+    """A passing critique now routes to the Aligner, not END."""
     state = OKRState(intent="x", proposal=_proposal(), critique=_critique("pass"))
+    assert supervisor(state) == "aligner"
+
+
+def _alignment(verdict: str = "aligned", vertical: float = 0.85) -> AlignmentResult:
+    return AlignmentResult(
+        vertical_score=vertical,
+        vertical_reasoning="r",
+        conflicts=[],
+        verdict=verdict,  # type: ignore[arg-type]
+        suggestions=[],
+    )
+
+
+@pytest.mark.unit
+def test_supervisor_ends_on_aligned() -> None:
+    """After a passing critique and aligned alignment, the run ends successfully."""
+    state = OKRState(
+        intent="x",
+        proposal=_proposal(),
+        critique=_critique("pass"),
+        alignment=_alignment("aligned"),
+    )
     assert supervisor(state) == END
+
+
+@pytest.mark.unit
+def test_supervisor_escalates_on_alignment_blocked() -> None:
+    state = OKRState(
+        intent="x",
+        proposal=_proposal(),
+        critique=_critique("pass"),
+        alignment=_alignment("blocked", vertical=0.2),
+    )
+    assert supervisor(state) == "human"
+
+
+@pytest.mark.unit
+def test_supervisor_escalates_on_alignment_needs_review() -> None:
+    state = OKRState(
+        intent="x",
+        proposal=_proposal(),
+        critique=_critique("pass"),
+        alignment=_alignment("needs_review", vertical=0.55),
+    )
+    assert supervisor(state) == "human"
 
 
 @pytest.mark.unit
