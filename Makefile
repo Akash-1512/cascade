@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format type test test-unit test-integration cov clean docker-up docker-down
+.PHONY: help install dev lint format type test test-unit test-integration cov clean docker-up docker-down demo demo-reset
 
 PYTHON ?= python3.12
 VENV   ?= .venv
@@ -67,3 +67,11 @@ run-mcp:  ## Run the MCP server
 
 run-ui:  ## Run the Streamlit UI
 	$(VENV)/bin/streamlit run cascade/ui/app.py
+
+demo:  ## Seed the demo dataset (idempotent — skips if already seeded)
+	$(VENV)/bin/alembic upgrade head
+	$(VENV)/bin/python -m cascade.scripts.seed_demo --verbose
+
+demo-reset:  ## Wipe and re-seed the demo dataset
+	$(VENV)/bin/alembic upgrade head
+	$(VENV)/bin/python -m cascade.scripts.seed_demo --reset --verbose
