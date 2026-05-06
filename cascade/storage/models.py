@@ -310,3 +310,53 @@ class DecisionLinkORM(Base):
         ),
         CheckConstraint("from_id <> to_id", name="no_self_link"),
     )
+
+
+class OrganizationalLearningORM(Base):
+    """A learning theme distilled from a quarterly retrospective.
+
+    The Reflector clusters patterns across check-ins and decisions; surviving
+    themes are persisted here so future Reflectors can see prior learnings,
+    and so a quarterly review can pull the org's running list of recurring
+    issues. This is the "organizational memory that survives turnover" surface.
+
+    Themes are immutable once written. To express that a theme has been
+    addressed or no longer applies, write a new row referencing it via the
+    ``supersedes_id`` column rather than updating the original — the trail
+    is part of the audit value.
+    """
+
+    __tablename__ = "organizational_learnings"
+
+    id: Mapped[uuid_pk] = mapped_column(default=uuid4)
+    team_id: Mapped[uuid_fk] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("teams.id", ondelete="CASCADE"),
+    )
+    quarter: Mapped[str] = mapped_column(String(6))
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(2000))
+    category: Mapped[str] = mapped_column(String(20))
+    occurrences: Mapped[int] = mapped_column(Integer)
+    affected_okr_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    supersedes_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organizational_learnings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[created_at]
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('execution', 'planning', 'alignment', 'estimation', "
+            "'external', 'process')",
+            name="category_allowed",
+        ),
+        CheckConstraint(
+            r"quarter ~ '^\d{4}Q[1-4]$'",
+            name="quarter_format",
+        ),
+        CheckConstraint("occurrences >= 1", name="occurrences_positive"),
+        Index("ix_org_learnings_team_quarter", "team_id", "quarter"),
+        Index("ix_org_learnings_category", "category"),
+    )

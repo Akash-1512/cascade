@@ -22,7 +22,7 @@ from cascade.storage.models import (
 
 @pytest.mark.unit
 def test_all_tables_registered() -> None:
-    """All seven domain tables are present in the metadata."""
+    """All eight domain tables are present in the metadata."""
     expected = {
         "teams",
         "users",
@@ -31,6 +31,7 @@ def test_all_tables_registered() -> None:
         "check_ins",
         "decisions",
         "decision_links",
+        "organizational_learnings",
     }
     assert set(Base.metadata.tables.keys()) == expected
 
