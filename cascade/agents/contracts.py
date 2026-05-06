@@ -142,7 +142,144 @@ class HumanInterrupt(BaseModel):
     reason: Literal[
         "iteration_cap_reached",
         "fundamental_reject",
+        "alignment_conflict",
         "target_change",
+        "kr_descope",
         "risk_intervention",
     ]
     payload: dict[str, object] = Field(default_factory=dict)
+
+
+# --- Aligner contracts ------------------------------------------------------
+
+
+class AlignmentConflict(BaseModel):
+    """A specific conflict between the proposal and a peer or parent OKR."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    peer_okr_id: str | None = Field(
+        default=None,
+        description="UUID of the peer OKR if the conflict is horizontal; None for vertical.",
+    )
+    peer_title: str
+    conflict_type: Literal["resource", "metric", "scope", "timing"]
+    description: str = Field(min_length=1, max_length=500)
+    severity: Literal["info", "warning", "blocking"]
+
+
+class AlignmentResult(BaseModel):
+    """The Aligner's structured judgement on alignment.
+
+    ``vertical_score`` measures how well the proposal ladders up to its parent
+    Objective. ``conflicts`` lists horizontal collisions with peer OKRs. A
+    proposal can pass alignment with informational conflicts but not blocking
+    ones.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vertical_score: float = Field(ge=0.0, le=1.0)
+    vertical_reasoning: str = Field(min_length=1, max_length=1000)
+    conflicts: list[AlignmentConflict] = Field(default_factory=list, max_length=20)
+    verdict: Literal["aligned", "needs_review", "blocked"]
+    suggestions: list[str] = Field(default_factory=list, max_length=10)
+
+
+# --- Check-in Coach contracts -----------------------------------------------
+
+
+class CheckInUpdate(BaseModel):
+    """A proposed update derived from a check-in conversation.
+
+    The Coach extracts these from free-text user messages. Anything that changes
+    a target or descopes a KR triggers an HITL interrupt — the user must
+    explicitly confirm.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key_result_id: str
+    new_progress_value: float | None = None
+    new_target_value: float | None = None
+    new_status: (
+        Literal["not_started", "on_track", "at_risk", "off_track", "achieved", "missed"] | None
+    ) = None
+    confidence: Literal["high", "medium", "low"]
+    blockers: str | None = Field(default=None, max_length=2000)
+    narrative: str = Field(min_length=1, max_length=4000)
+    requires_confirmation: bool = Field(
+        default=False,
+        description="True when the update changes a target — Coach interrupts.",
+    )
+
+
+class CoachResponse(BaseModel):
+    """The Coach's structured output from a check-in turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    updates: list[CheckInUpdate] = Field(default_factory=list, max_length=10)
+    coaching_message: str = Field(min_length=1, max_length=4000)
+    follow_up_questions: list[str] = Field(default_factory=list, max_length=5)
+
+
+# --- Reflector contracts ----------------------------------------------------
+
+
+class ReflectionTheme(BaseModel):
+    """A pattern the Reflector clusters out of quarterly check-ins."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=2000)
+    affected_okr_ids: list[str] = Field(default_factory=list, max_length=20)
+    occurrences: int = Field(ge=1, description="Number of check-ins exhibiting this theme.")
+    category: Literal["execution", "planning", "alignment", "estimation", "external", "process"]
+
+
+class ReflectionResult(BaseModel):
+    """The Reflector's quarterly retrospective output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quarter: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    summary: str = Field(min_length=1, max_length=4000)
+    themes: list[ReflectionTheme] = Field(default_factory=list, max_length=10)
+    wins: list[str] = Field(default_factory=list, max_length=10)
+    losses: list[str] = Field(default_factory=list, max_length=10)
+    recommendations: list[str] = Field(default_factory=list, max_length=10)
+
+
+# --- Risk Sentinel contracts ------------------------------------------------
+
+
+class RiskFactor(BaseModel):
+    """A single contributor to elevated risk on an Objective or KR."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    severity: Literal["low", "medium", "high"]
+    explanation: str = Field(min_length=1, max_length=500)
+
+
+class RiskAssessment(BaseModel):
+    """The Risk Sentinel's structured prediction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    okr_id: str
+    risk_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Probability of missing the target by quarter end. 0=safe, 1=certain miss.",
+    )
+    velocity_assessment: Literal["ahead", "on_pace", "slowing", "stalled"]
+    factors: list[RiskFactor] = Field(default_factory=list, max_length=10)
+    recommended_interventions: list[str] = Field(default_factory=list, max_length=5)
+    requires_intervention: bool = Field(
+        default=False,
+        description="True when risk_score crosses the configured threshold.",
+    )
