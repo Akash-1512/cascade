@@ -6,7 +6,7 @@
   <a href="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12+-blue.svg">
-  <img alt="Tests: 275 passing" src="https://img.shields.io/badge/tests-275%20passing-brightgreen">
+  <img alt="Tests: 349 passing" src="https://img.shields.io/badge/tests-349%20passing-brightgreen">
   <img alt="MCP: 8 tools" src="https://img.shields.io/badge/MCP-8%20tools-blueviolet">
 </p>
 
@@ -99,14 +99,17 @@ cd cascade
 # Bring up Postgres and ChromaDB
 docker compose up -d
 
-# Install with dev extras
-pip install -e ".[dev]"
+# Install with dev and ui extras
+pip install -e ".[dev,ui]"
 
 # Run migrations
 alembic upgrade head
 
+# Seed the demo dataset (1 team, 2 users, 3 OKRs, 8 decisions, 3 learnings)
+make demo                   # idempotent; make demo-reset to wipe and refresh
+
 # Run the test suite
-pytest                      # 275 tests, ~5 seconds
+pytest                      # 349 tests, ~10 seconds
 pytest -m unit              # unit only
 pytest --cov=cascade        # with coverage
 
@@ -114,11 +117,15 @@ pytest --cov=cascade        # with coverage
 python -m cascade.evals.gate --use-fakes --output eval_results.json
 python -m cascade.evals.check_thresholds eval_results.json
 
-# Start the MCP server
-python -m cascade.mcp.server                            # stdio
-python -m cascade.mcp.server --transport sse            # SSE
-python -m cascade.mcp.server --transport streamable-http
+# Start the integration surfaces
+python -m cascade.mcp.server                              # MCP, stdio
+uvicorn cascade.api.main:app --host 0.0.0.0 --port 8000   # REST API
+streamlit run cascade/ui/app.py                           # operator console
 ```
+
+After `make demo`, paste the printed team UUID into the operator console
+sidebar (and any UUID as the bearer token in dev mode) to see populated
+OKRs, KRs, decision trails, and organizational learnings.
 
 ## Use it from Claude Desktop
 
@@ -196,7 +203,7 @@ tests/
 | Retrieval | BM25 + dense + LLM cross-encoder rerank | Each catches what the others miss; ADR-0003 |
 | Persistence | SQLAlchemy 2.0 async + Alembic | Async sessions, repository pattern, migration history |
 | MCP server | FastMCP | Auto-derives JSON schemas from Pydantic types |
-| Tests | pytest + pytest-asyncio | 275 tests in ~5 seconds with SQLite override |
+| Tests | pytest + pytest-asyncio | 349 tests in ~10 seconds with SQLite override |
 | Eval gate | Custom Pydantic-typed harness | Drafting F1 + retrieval F1 + red-team pass rate |
 | CI | GitHub Actions | Lint, types, unit, integration, build, eval, security |
 
