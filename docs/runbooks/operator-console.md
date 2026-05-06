@@ -98,18 +98,19 @@ token the user pastes.
 
 ## Demo data
 
-For a quick demo you can seed a team and OKR via the database:
+The fastest way to see the console populated is the demo seed:
 
 ```bash
-docker compose exec postgres psql -U cascade -d cascade -c "
-INSERT INTO teams (id, name, slug)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Demo Team', 'demo');
-"
+make demo
 ```
 
-Then paste `11111111-1111-1111-1111-111111111111` as the team ID. The
-list will be empty until OKRs are drafted via the MCP server, but the
-empty-state copy explains the next step.
+This creates a team (slug `demo-team`), two users, three OKRs, eight
+decisions, and three organizational learnings. The script prints the demo
+team's UUID — paste it into the sidebar.
+
+Run `make demo-reset` to wipe and re-seed when you want a clean state. See
+[`cascade/scripts/README.md`](../../cascade/scripts/README.md) for the
+script's CLI options and idempotency contract.
 
 ## Troubleshooting
 
