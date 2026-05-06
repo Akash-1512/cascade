@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-06
+
+### Added
+- **REST API** as the second integration surface alongside the MCP server.
+  Read-side projection over OKRs, decisions, and organizational learnings;
+  mutations stay in MCP because that's where the agent loop lives.
+- Routes:
+  - `GET /v1/teams/{team_id}/okrs?quarter={q}` — list OKRs, optionally
+    filtered by quarter
+  - `GET /v1/okrs/{id}` — full OKR view with KRs and derived scores
+  - `GET /v1/okrs/{id}/score` — per-KR scoring breakdown
+  - `GET /v1/okrs/{id}/decisions?limit={n}` — causal trail
+  - `GET /v1/teams/{team_id}/learnings?quarter={q}&category={c}` —
+    organizational learnings, filterable by quarter or category
+- Health and readiness probes:
+  - `GET /health` — liveness, no external dependencies (returns 200 even
+    during DB outages so K8s doesn't kill the pod)
+  - `GET /health/ready` — readiness, verifies Postgres is reachable
+- JWT bearer auth scaffolding (`cascade.api.auth`) with two modes:
+  - `dev` — accepts any UUID as the principal's `user_id`, useful for
+    curl, the upcoming Streamlit operator console, and local development
+  - `jwt` — production placeholder; fails closed (503) until a real JWKS
+    verifier is wired in
+- `Principal` dataclass, `require_principal` FastAPI dependency, and
+  `SessionDep` for database-backed routes
+- Wire schemas in `cascade.api.schemas` distinct from `cascade.mcp.schemas`
+  so the two surfaces evolve independently
+- CORS middleware configured via `CASCADE_API_CORS_ALLOW_ORIGINS`
+- `cascade/api/README.md` per-component README documenting routes,
+  auth modes, the read-only design choice, and curl examples
+- `docs/runbooks/rest-api.md` runbook with full curl examples and
+  troubleshooting
+
+### Changed
+- Top-level README now lists both integration surfaces (MCP and REST) with
+  short usage examples
+- `tests/conftest.py` `api_client` fixture monkeypatches `get_sessionmaker`
+  so unit tests don't require psycopg
+- `Settings` gains `api_auth_mode` and `api_cors_allow_origins`
+
+### Tests
+- 319 total: 250 unit + 68 integration (all green); 1 e2e skipped without keys
+- 5 new unit tests for the auth dependency (missing token → 401, dev-mode
+  UUID acceptance, dev-mode non-UUID rejection, JWT-mode unconfigured 503,
+  Principal frozen)
+- 13 new integration tests covering all routes and auth paths
+
 ## [0.8.0] - 2026-05-06
 
 ### Added
@@ -255,7 +302,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Akash-1512/cascade/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Akash-1512/cascade/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Akash-1512/cascade/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Akash-1512/cascade/compare/v0.6.0...v0.7.0

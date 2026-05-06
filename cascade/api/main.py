@@ -1,8 +1,10 @@
 """FastAPI application entry point.
 
-Exposes liveness and readiness probes from the start so the Docker ``HEALTHCHECK`` and
-Kubernetes manifests have something to call. Domain routes are added in subsequent
-phases.
+Run locally with::
+
+    uvicorn cascade.api.main:app --reload --host 0.0.0.0 --port 8000
+
+OpenAPI docs at ``/docs``; the schema lives at ``/openapi.json``.
 """
 
 from __future__ import annotations
@@ -11,10 +13,14 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from cascade._version import __version__
+from cascade.api.routes import decisions, learnings, okrs
+from cascade.api.schemas import HealthResponse
 from cascade.config import get_settings
+from cascade.storage.session import get_sessionmaker
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -22,15 +28,20 @@ if TYPE_CHECKING:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan — placeholder for connection pools added in later phases."""
+    """Application lifespan — initialise shared resources, tear them down on exit."""
     settings = get_settings()
     app.state.settings = settings
+    app.state.sessionmaker = get_sessionmaker()
     yield
 
 
 app = FastAPI(
     title="cascade",
-    description="OKR governance platform with multi-agent AI coaching.",
+    description=(
+        "OKR governance platform with multi-agent AI coaching. "
+        "Read-side projection over the agent state and causal memory; "
+        "mutations flow through the MCP server where the agent loop lives."
+    ),
     version=__version__,
     lifespan=lifespan,
     docs_url="/docs",
@@ -38,22 +49,54 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+_settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_settings.api_cors_allow_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
-@app.get("/health", tags=["health"], summary="Liveness probe")
-async def health() -> JSONResponse:
+app.include_router(okrs.router)
+app.include_router(decisions.router)
+app.include_router(learnings.router)
+
+
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["health"],
+    summary="Liveness probe",
+)
+async def health() -> HealthResponse:
     """Return 200 if the process is alive.
 
-    Liveness probes must not depend on external systems — a transient Postgres outage
-    should not cause the pod to be killed.
+    Liveness probes must not depend on external systems — a transient
+    Postgres outage should not cause the pod to be killed.
     """
-    return JSONResponse({"status": "ok", "version": __version__})
+    settings = get_settings()
+    return HealthResponse(status="ok", version=__version__, cascade_env=settings.cascade_env)
 
 
-@app.get("/health/ready", tags=["health"], summary="Readiness probe")
-async def ready() -> JSONResponse:
+@app.get(
+    "/health/ready",
+    response_model=HealthResponse,
+    tags=["health"],
+    summary="Readiness probe",
+)
+async def ready() -> HealthResponse:
     """Return 200 once the service is ready to handle traffic.
 
-    Readiness checks are added in Phase 1 once Postgres and ChromaDB clients are wired
-    in. For now this returns 200 unconditionally.
+    Verifies the database is reachable. ChromaDB readiness is checked lazily
+    on first use — failing readiness on ChromaDB unavailability would block
+    every request, even those that don't touch the vector store.
     """
-    return JSONResponse({"status": "ready", "version": __version__})
+    settings = get_settings()
+    sessionmaker = getattr(app.state, "sessionmaker", None) or get_sessionmaker()
+    async with sessionmaker() as session:
+        await session.execute(text("SELECT 1"))
+    return HealthResponse(status="ready", version=__version__, cascade_env=settings.cascade_env)
+
+
+__all__ = ["app"]
