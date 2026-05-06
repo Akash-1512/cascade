@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-05
+
+### Added
+- **MCP server** — cascade is now queryable over the Model Context Protocol from
+  Claude Desktop, Cursor, or any MCP-compatible client. Built on FastMCP with
+  auto-derived JSON schemas from Pydantic types.
+- Eight MCP tools registered:
+  - `list_okrs` — compact OKR summaries filtered by team and quarter
+  - `get_okr` — full Objective view with KRs and derived scores
+  - `draft_okr` — Drafter + Critic loop with verdict
+  - `score_okr` — current score breakdown for an existing Objective
+  - `log_checkin` — Coach-mediated check-in with structured persistence
+  - `query_decisions` — causal trail for an Objective
+  - `assess_risk` — Risk Sentinel agent with intervention recommendations
+  - `get_alignment` — Aligner agent with vertical and horizontal checks
+- Wire-format schemas in `cascade.mcp.schemas` distinct from `cascade.domain` so
+  the protocol surface evolves independently of the persistence schema
+- Adapters in `cascade.mcp.adapters` for clean conversion between domain and wire
+  types — UUIDs as strings, datetimes as ISO 8601, Pydantic→dict for nested
+  alternatives and evidence
+- Three transport modes: stdio (Claude Desktop / Cursor), SSE, streamable-http
+- `cascade-mcp` console script and `python -m cascade.mcp.server` entry point
+- MCP runbook with Claude Desktop and Cursor configuration examples
+- README updated with MCP advertisement and transport options
+
+### Tests
+- 243 total: 209 unit + 34 integration (all green); 1 e2e skipped without keys
+- 13 new tests: 10 adapter unit + 9 MCP integration + 3 server entry-point unit
+
 ## [0.5.0] - 2026-05-05
 
 ### Added
@@ -122,7 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Akash-1512/cascade/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Akash-1512/cascade/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Akash-1512/cascade/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Akash-1512/cascade/compare/v0.2.0...v0.3.0
