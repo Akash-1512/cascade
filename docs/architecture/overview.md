@@ -81,35 +81,49 @@ different agents, retrieved from memory rather than dumped as a single static bl
 
 See [memory.md](./memory.md) for schemas and retrieval flows.
 
-### 3. Integration surfaces (`cascade/api`, `cascade/mcp`, `cascade/ui`)
+### 3. Integration surfaces (`cascade/mcp`)
 
-Three ways into the system:
+**MCP server** is the primary integration surface. Eight tools are exposed via
+FastMCP with auto-derived JSON schemas from Pydantic types. Three transports
+supported: stdio (Claude Desktop / Cursor), SSE (cross-process), and
+streamable-http (production behind a reverse proxy).
 
-- **REST API** — FastAPI, OpenAPI auto-generated, JWT auth
-- **MCP server** — FastMCP, eight tools, configurable in three lines for any MCP client
-- **Streamlit UI** — operator console for browsing OKRs, decisions, and traces
+REST API and Streamlit UI are planned for future phases. The MCP surface
+covers the read paths an operator console would need today, and the gap
+between an MCP client like Claude Desktop and a custom UI is shrinking.
 
 ### 4. Evals & observability (`cascade/evals`, `cascade/observability`)
 
-Quality is enforced, not aspired to. CI gates merges on:
+Quality is enforced, not aspired to. CI gates merges on three eval families:
 
-- Drafting F1 against a hand-labeled golden set
-- Retrieval faithfulness (RAGAS) on the memory pipeline
-- Red-team adversarial pass rate
+- **drafting_f1** — Critic verdict agreement on a 30-case hand-labeled golden
+  set (10 pass / 10 needs_revision / 10 reject across 9 functional roles).
+  Threshold 0.85.
+- **retrieval_f1** — Hybrid retrieval F1 on 10 self-contained memory-question
+  cases. Threshold 0.90.
+- **red_team_pass_rate** — Adversarial robustness across 6 attack types
+  (vague injection, sandbagging, target gaming, prompt injection, decision
+  laundering, memory poisoning). Threshold 0.95.
 
-Traces flow to LangSmith. Costs and latency to Langfuse. Eval runs and prompt versions
-to MLflow.
+Threshold floors live in `eval_data/thresholds.yaml`; loosening one requires
+an ADR. Two-step gating: the runner produces a structured `EvalReport`
+(always uploaded as artifact); the threshold checker reads it and exits
+non-zero on regression.
+
+Traces flow to LangSmith. Costs and latency to Langfuse. Eval runs and
+prompt versions to MLflow.
 
 See [evals.md](./evals.md) and [observability.md](./observability.md).
 
 ## Substrate
 
 - **Postgres 16** — system of record for OKRs, KRs, check-ins, decisions, users
-- **ChromaDB** — vector store for conversational and organizational memory
+- **ChromaDB** — vector store for conversational memory; default embedding
+  function is ONNX MiniLM (no PyTorch dependency)
 - **Groq (LLaMA 3.3 70B)** — primary LLM, free tier
-- **Together AI** — fallback provider when Groq is rate-limited
-- **Sentence Transformers (`bge-small-en-v1.5`)** — embeddings
-- **Cross-encoder (`ms-marco-MiniLM-L-6-v2`)** — reranking
+- **OpenAI** — fallback provider when Groq is rate-limited
+- **LLM cross-encoder** — reranking via the chat model itself; ONNX
+  cross-encoder model is a drop-in replacement at scale
 
 ## Deployment topology
 
