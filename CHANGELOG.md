@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-05
+
+### Added
+- **Aligner agent** — vertical and horizontal alignment checks. Vertical score in
+  [0, 1] against a parent OKR; horizontal conflict detection (resource, metric,
+  scope, timing) against peer OKRs. Verdict normalisation makes the gate
+  deterministic regardless of LLM variance: any blocking conflict OR vertical < 0.4
+  forces blocked; any warning conflict OR vertical < 0.7 forces needs_review.
+- **Check-in Coach agent** — turns free-text owner messages into structured
+  updates. Forces `requires_confirmation` whenever a target value changes so the
+  HITL interrupt always fires for target-change decisions.
+- **Reflector agent** — quarterly retrospective. Groups check-ins by their owning
+  OKR via KR id resolution; groups decisions by objective_id; renders a structured
+  prompt the LLM clusters into themes (with category enum), wins, losses, and
+  specific recommendations.
+- **Risk Sentinel agent** — velocity-based at-risk prediction. Score normalised
+  against `INTERVENTION_THRESHOLD = 0.5`; stalled velocity overrides the threshold
+  regardless of score so a flatlined OKR always gets attention.
+- Per-agent prompt templates: `aligner.j2`, `checkin_coach.j2`, `reflector.j2`,
+  `risk_sentinel.j2`
+- Aligner integrated into the LangGraph state machine — Drafter → Critic → Aligner
+  with HITL escalation on alignment_conflict
+- Extended `OKRState` with `peer_objectives`, `alignment`, `risk` fields
+- Extended `HumanInterrupt` reasons with `alignment_conflict` and `kr_descope`
+
+### Tests
+- 221 total: 196 unit + 25 integration (all green); 1 e2e skipped without keys
+- 24 new unit tests across the four new agents
+- Supervisor and graph tests updated for the new aligner routing
+
 ## [0.4.0] - 2026-05-05
 
 ### Added
@@ -92,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Akash-1512/cascade/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Akash-1512/cascade/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Akash-1512/cascade/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Akash-1512/cascade/compare/v0.1.0...v0.2.0
