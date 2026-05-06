@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cascade"
-version = "0.9.0"
+version = "0.10.0"
 description = "OKR governance platform with multi-agent AI coaching and organizational memory"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -84,6 +84,11 @@ evals = [
   "ragas>=0.2.6",
   "deepeval>=1.5.0",
   "datasets>=3.0.0",
+]
+ui = [
+  "streamlit>=1.40.0",
+  "pandas>=2.2.0",
+  "httpx>=0.27.0",
 ]
 
 [project.urls]
