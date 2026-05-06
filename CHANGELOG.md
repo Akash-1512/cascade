@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-06
+
+### Added
+- **Streamlit operator console** as the third integration surface alongside
+  the MCP server and REST API. Read-only viewer for OKRs, KRs, decision
+  trails, and organizational learnings.
+- Three views:
+  - **OKR list** — sortable table with status badges and score indicators;
+    drill-down picker into the detail view
+  - **OKR detail** — full single-OKR view with KR metrics (baseline,
+    current, target, weight) and the complete decision trail with
+    alternatives, tradeoffs, and evidence
+  - **Learnings** — quarterly themes filterable by category, with
+    supersedes-link rendering for resolved themes
+- `cascade.ui.api_client.APIClient` — thin synchronous httpx wrapper that
+  surfaces a single typed `APIError` so views handle one exception type
+  rather than catching httpx exceptions directly. Tests use
+  `httpx.MockTransport` to stub responses without standing up a server.
+- `cascade.ui.views.components` — shared visual vocabulary (status badges
+  with semantic colour mapping, score indicators with thresholds matching
+  the Risk Sentinel, category badges, ISO datetime formatting that
+  tolerates Z suffixes, current-and-recent quarters helper)
+- Sidebar configuration for API URL, bearer token, team ID, quarter, and
+  view selection. Connection-status panel runs `/health` on every render.
+- `cascade/ui/README.md` per-component README and
+  `docs/runbooks/operator-console.md` runbook
+- New `ui` extra in `pyproject.toml` (`pip install -e ".[ui]"`) — keeps
+  Streamlit and pandas out of the API/core install
+
+### Changed
+- Top-level README now lists three integration surfaces side-by-side
+  (MCP, REST, console) with short usage examples
+
+### Tests
+- 349 total: 280 unit + 68 integration (all green); 1 e2e skipped without keys
+- 11 new unit tests for the API client (auth header presence, query params,
+  error mapping, network failure wrapping, malformed error body fallback)
+- 12 new unit tests for shared components (status thresholds, score colour
+  thresholds, datetime formatting edge cases, quarter helpers monotonic)
+- 7 new Streamlit `AppTest` tests covering sidebar prompts, view dispatch,
+  empty states, and error paths with the API client patched
+
+### Design choices documented
+- Console is read-only — drafts/commits/check-ins flow through the MCP
+  server because that's where the agent loop lives. A second mutation path
+  in the UI would skip the Critic, the Aligner, and the Decision recorder.
+- Single typed `APIError` for all client failures (network + 4xx + 5xx)
+  rather than leaking httpx exceptions to views
+- Unknown statuses fall back to a grey badge rather than raising —
+  forward-compatible with API additions
+- Three-tier test pyramid for the UI: pure components → mocked client →
+  full app via `AppTest`. Keeps coverage broad without making the test
+  suite slow.
+
 ## [0.9.0] - 2026-05-06
 
 ### Added
@@ -302,7 +356,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Akash-1512/cascade/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Akash-1512/cascade/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Akash-1512/cascade/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Akash-1512/cascade/compare/v0.7.0...v0.7.1
