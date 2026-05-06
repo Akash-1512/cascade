@@ -86,26 +86,56 @@ def _resolve_dev_token(token: str) -> Principal:
 def _resolve_jwt_token(token: str) -> Principal:
     """Production JWT verification.
 
-    Stub for the real implementation. A proper implementation pulls JWKS from
-    the configured identity provider, verifies the signature and standard
-    claims (iss, aud, exp), and extracts the principal from ``sub``.
+    Delegates to :class:`cascade.api.jwt_verifier.JWTVerifier`, which
+    fetches the configured JWKS, validates the signature and standard
+    claims (iss, aud, exp, nbf), and extracts the principal from ``sub``.
 
-    Until that's wired in, fail closed — production mode without a verifier
-    rejects all tokens. This is intentional: it surfaces the misconfiguration
-    immediately rather than silently letting requests through.
+    Three failure shapes are mapped to HTTP responses here:
+
+    - **Misconfiguration** (no JWKS URL or issuer/audience) → 503. The
+      service is not ready to verify tokens; the deployment needs fixing.
+    - **JWKS unavailable** → 503. The provider is down or unreachable;
+      retry is the right action.
+    - **Verification failed** → 401. The token is bad — bad signature,
+      expired, wrong issuer, etc. The user needs a fresh token.
     """
-    logger.error(
-        "Production JWT verification is not yet wired in. "
-        "Set CASCADE_API_AUTH_MODE=dev for development, "
-        "or configure your identity provider in cascade.api.auth.",
+    from cascade.api.jwt_verifier import (
+        JWKSUnavailable,
+        JWTVerificationError,
+        get_verifier,
     )
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=(
-            "JWT verification not configured. Set api_auth_mode=dev for "
-            "development or wire in a JWKS verifier."
-        ),
-    )
+
+    try:
+        verifier = get_verifier()
+    except JWTVerificationError as exc:
+        # Misconfiguration — surface immediately rather than silently failing.
+        logger.error("JWT verification misconfigured: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return verifier.verify(token)
+    except JWKSUnavailable as exc:
+        logger.error("JWKS endpoint unavailable: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Identity provider's JWKS endpoint is unavailable; please "
+                "retry. If this persists, check the provider's status page."
+            ),
+        ) from exc
+    except JWTVerificationError as exc:
+        # Don't leak the specific reason to the caller — same response for
+        # all verification failures so an attacker can't probe the verifier
+        # by varying the token. The full reason is in the server log.
+        logger.info("JWT verification failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is invalid or expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
 
 __all__ = ["Principal", "require_principal"]

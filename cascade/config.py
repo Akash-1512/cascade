@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # --- REST API ---------------------------------------------------------
     api_auth_mode: Literal["dev", "jwt"] = "dev"
     api_cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # JWT verification (only used when api_auth_mode='jwt')
+    api_jwks_url: str | None = None
+    api_jwt_issuer: str | None = None
+    api_jwt_audience: str | None = None
+    api_jwks_cache_ttl_seconds: int = 3600
 
     @property
     def is_production(self) -> bool:

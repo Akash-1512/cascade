@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-06
+
+### Added
+- **JWKS-backed JWT verification** for the REST API. Replaces the v0.9.0
+  stub that 503'd unconditionally. Provider-agnostic — any identity provider
+  publishing a standard JWKS document works (Auth0, AWS Cognito, Clerk,
+  Keycloak, Azure AD).
+- `cascade.api.jwt_verifier.JWTVerifier` composing a `JWKSClient` with
+  issuer + audience config. Verifies signature, validates iss/aud/exp,
+  extracts the principal from `sub`. Pluggable httpx transport so tests use
+  `httpx.MockTransport` to stub the JWKS endpoint without standing up a
+  real provider.
+- `cascade.api.jwt_verifier.JWKSClient` with TTL caching, refetch-on-miss
+  for between-rotation kid lookups, and explicit failure paths separating
+  "verification failed" (user error → 401) from "JWKS unavailable" (service
+  error → 503).
+- New `Settings` fields: `api_jwks_url`, `api_jwt_issuer`,
+  `api_jwt_audience`, `api_jwks_cache_ttl_seconds`.
+- `cachetools>=5.5.0` added to core dependencies (used by `JWKSClient`).
+- `docs/runbooks/jwt-auth.md` runbook with provider-specific configuration
+  blocks for Auth0, AWS Cognito, Clerk, and Keycloak; security notes; and
+  the most common troubleshooting paths.
+
+### Changed
+- `_resolve_jwt_token` now wires up to the real verifier instead of returning
+  503 unconditionally. Three failure shapes are mapped to HTTP responses:
+  misconfiguration → 503, JWKS unavailable → 503, verification failed → 401.
+- Verification failures all return the same generic 401 detail
+  ("Token is invalid or expired") — the specific reason logs at INFO level
+  but is not leaked to callers, so an attacker can't probe the verifier by
+  varying the token.
+- `cascade/api/README.md` updated to describe real JWT mode rather than the
+  stub. Pointer to the new runbook.
+- `tests/unit/test_api_auth.py::test_jwt_mode_returns_503_when_unconfigured`
+  updated for the new error message and now resets the verifier singleton
+  in cleanup so global state doesn't leak between tests.
+
+### Tests
+- 391 total: 308 unit + 82 integration (all green); 1 e2e skipped without keys
+- 21 new unit tests for the verifier itself: happy path, namespaced team_id
+  claim, malformed team_id treated as absent, expired tokens, leeway
+  absorption of small clock skew, wrong issuer, wrong audience, missing
+  sub, non-UUID sub, signature forgery rejection, unknown kid rejection,
+  missing kid header, alg=none rejection, malformed token, JWKS endpoint
+  5xx, JWKS endpoint non-JSON, JWKS endpoint with no keyed keys, cache
+  hit avoids refetch, cache refetches on unknown kid, verifier construction
+  rejects empty config
+- 5 new unit tests for the auth dependency in JWT mode: valid token →
+  Principal, expired → 401, wrong issuer → 401, JWKS unreachable → 503,
+  unconfigured → 503 with names of missing settings
+
+### Design choices documented
+- Module-level lazy verifier singleton (`get_verifier()`/`reset_verifier()`)
+  so dev-mode never instantiates the verifier — local development never
+  reaches a JWKS endpoint.
+- Separate exception types for verification failure vs JWKS unavailability —
+  the right HTTP response is different (401 vs 503) and conflating them in
+  one type would force the auth dependency to inspect message strings.
+- Cache TTL with refetch-on-miss rather than "until invalidated" — even
+  unannounced key rotations stop failing within the TTL.
+- Generic 401 detail for all verification failures (defence against
+  oracle-style probing) plus full reason logged for diagnosis.
+
 ## [0.11.0] - 2026-05-06
 
 ### Added
@@ -411,7 +474,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Akash-1512/cascade/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Akash-1512/cascade/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Akash-1512/cascade/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Akash-1512/cascade/compare/v0.8.0...v0.9.0
