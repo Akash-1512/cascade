@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-05
+
+### Added
+- Memory layer protocols: `Embedder`, `Reranker`, `Retriever`, `MemoryStore` —
+  swappable implementations without touching agent code
+- `BM25Index` — keyword index for high-precision retrieval on rare terms,
+  named entities, and project codenames
+- `HybridRetriever` — three-stage pipeline (BM25 + dense + cross-encoder rerank)
+  unifying lexical and semantic signals
+- `LLMReranker` — cross-encoder pattern via the chat model, with neutral-score
+  fallback when scoring fails
+- `ChromaMemoryStore` — production-grade vector store using ChromaDB's default
+  ONNX MiniLM embeddings (no PyTorch dependency)
+- In-memory fakes (`HashEmbedder`, `IdentityReranker`, `InMemoryStore`,
+  `StaticRetriever`) for hermetic unit tests
+- `ContextBuilder` — dynamic task-aware prompt assembly with per-agent retrieval
+  budgets; replaces static-context-file pattern
+- `MemoryRecorder` — bridges agent runs to durable storage; persists Objective →
+  Decision → transcript chunks in the right order with cross-references
+- ADR-0003 documenting the dynamic-context design rationale
+
+### Changed
+- Drafter accepts an optional `context_builder` plus `okr_id`, `team_id`, and
+  `quarter` for memory-aware revisions; the prompt template renders a "Relevant
+  memory" section when context is provided
+- Drafter prompt template extended with a memory_context block
+
+### Tests
+- 193 total: 168 unit + 25 integration (all green); 1 e2e skipped without keys
+
 ## [0.3.0] - 2026-05-05
 
 ### Added
@@ -62,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Akash-1512/cascade/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Akash-1512/cascade/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Akash-1512/cascade/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Akash-1512/cascade/releases/tag/v0.1.0

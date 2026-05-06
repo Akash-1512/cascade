@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from cascade.agents.contracts import (
     DraftIteration,
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from cascade.domain.okr import Objective
+    from cascade.memory.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,10 @@ async def draft_objective(
     model: BaseChatModel,
     parent_objective: Objective | None = None,
     previous_attempts: list[DraftIteration] | None = None,
+    context_builder: ContextBuilder | None = None,
+    okr_id: UUID | None = None,
+    team_id: UUID | None = None,
+    quarter: str | None = None,
 ) -> ProposedObjective:
     """Draft a proposed Objective with Key Results.
 
@@ -41,6 +47,13 @@ async def draft_objective(
         parent_objective: Optional parent OKR for alignment context.
         previous_attempts: Earlier (proposal, critique) pairs from this session, used
             to steer the Drafter away from previously-flagged issues.
+        context_builder: Optional builder that pulls causal and conversational
+            memory. When provided, the Drafter sees decisions and transcript
+            chunks relevant to the current task.
+        okr_id: Forwarded to the context builder. Used for revisions of an existing
+            Objective — the Drafter sees the decisions on that exact OKR.
+        team_id: Forwarded to the context builder for team-scoped retrieval.
+        quarter: Forwarded to the context builder for quarter-scoped retrieval.
 
     Returns:
         A :class:`ProposedObjective` that has passed Pydantic validation. The Critic
@@ -53,11 +66,23 @@ async def draft_objective(
     if not intent or not intent.strip():
         raise DrafterError("intent must not be empty")
 
+    memory_context = ""
+    if context_builder is not None:
+        ctx = await context_builder.build(
+            agent="drafter",
+            intent=intent,
+            okr_id=okr_id,
+            team_id=team_id,
+            quarter=quarter,
+        )
+        memory_context = ctx.rendered
+
     prompt = render_prompt(
         "drafter",
         intent=intent.strip(),
         parent_objective=parent_objective,
         previous_attempts=previous_attempts or [],
+        memory_context=memory_context,
     )
 
     try:

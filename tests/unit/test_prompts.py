@@ -30,6 +30,7 @@ def test_drafter_prompt_renders_with_minimum_context() -> None:
         intent="Reach PMF in SMB",
         parent_objective=None,
         previous_attempts=[],
+        memory_context="",
     )
     assert "Reach PMF in SMB" in rendered
     assert "Drafter" in rendered  # role anchor — model knows it is the Drafter
@@ -66,6 +67,7 @@ def test_drafter_prompt_includes_iteration_history() -> None:
         intent="Reach PMF in SMB",
         parent_objective=None,
         previous_attempts=[iteration],
+        memory_context="",
     )
     assert "Iteration history" in rendered
     assert "Specify the customer segment" in rendered
@@ -104,7 +106,9 @@ def test_critic_prompt_includes_proposal_details() -> None:
 def test_undefined_variable_raises() -> None:
     """StrictUndefined ensures missing variables fail loudly."""
     with pytest.raises(UndefinedError):
-        render_prompt("drafter", intent="x")  # missing parent_objective and previous_attempts
+        render_prompt(
+            "drafter", memory_context="", intent="x"
+        )  # missing parent_objective and previous_attempts
 
 
 @pytest.mark.unit

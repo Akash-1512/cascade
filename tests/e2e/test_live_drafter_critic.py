@@ -16,7 +16,6 @@ from cascade.agents.llm import get_chat_model
 from cascade.orchestrator.graph import build_graph
 from cascade.orchestrator.state import OKRState
 
-
 pytestmark = pytest.mark.skipif(
     not os.environ.get("GROQ_API_KEY"),
     reason="GROQ_API_KEY not set; skipping live smoke tests",

@@ -76,6 +76,17 @@ the parent — produce something concrete that, if achieved, contributes to the
 parent's success.
 {% endif %}
 
+{% if memory_context %}
+# Relevant memory
+
+The following decisions and conversational context were retrieved as relevant to
+this task. Use them to ground your draft, avoid repeating decisions that were
+already considered and rejected, and respect tradeoffs the team has already
+accepted.
+
+{{ memory_context }}
+{% endif %}
+
 # User intent
 
 {{ intent }}
