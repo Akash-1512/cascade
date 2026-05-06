@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cascade"
-version = "0.11.0"
+version = "0.12.0"
 description = "OKR governance platform with multi-agent AI coaching and organizational memory"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -35,6 +35,7 @@ dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.32.0",
   "python-jose[cryptography]>=3.3.0",
+  "cachetools>=5.5.0",
   "passlib[bcrypt]>=1.7.4",
   "python-multipart>=0.0.12",
 
