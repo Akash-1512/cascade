@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-06
+
+### Added
+- **HITL resumption** — the orchestrator graph now supports human-in-the-loop
+  resumption via LangGraph's `interrupt()` primitive. When the graph reaches
+  the `human` node with a checkpointer attached, it pauses with state
+  durable in the checkpointer; the caller resumes with
+  `Command(resume={"decision": "...", "notes": "..."})` and the graph
+  re-routes through the supervisor.
+- Three resumption decisions: `commit` (force aligned, demote blocking
+  conflicts to info, complete the run), `revise` (clear proposal/critique/
+  alignment, send back to Drafter), `abandon` (force blocked with audit
+  conflict, terminate).
+- `cascade.orchestrator.resumption` module with `apply_resume_payload`
+  (called inside the human node) and `resume()` (caller convenience
+  wrapper).
+- `build_graph` accepts an optional `checkpointer`. Without one, the human
+  node falls back to the previous "set `awaiting_human` and end" behaviour
+  for backwards compatibility.
+- **OrganizationalLearning persistence** — durable storage for Reflector
+  themes so quarterly retrospectives accumulate across quarters rather than
+  evaporating. Themes are immutable and append-only; `supersedes_id` carries
+  the audit trail.
+- `cascade.domain.organizational_learning` with `OrganizationalLearning`
+  and `OrganizationalLearningCreate` Pydantic types
+- `cascade.storage.repositories.organizational_learning.OrganizationalLearningRepository`
+  with `create`, `list_for_team` (filter by quarter or category), and `get`
+- New ORM table `organizational_learnings` with FK cascade to teams,
+  category enum check, quarter regex check (Postgres-only; SQLite skips it),
+  and team+quarter and category indexes
+- Alembic migration `0002_organizational_learnings`
+- `cascade.agents.reflector_persistence.persist_reflection_themes` bridges
+  Reflector output to durable storage; only persists themes with
+  `occurrences >= 2` (single-instance themes are anecdotes, not patterns)
+
+### Changed
+- `tests/integration/conftest.py` strips Postgres regex CHECK constraints
+  for SQLite test runs — production deployments still get the regex
+  enforcement; tests trade that for portability
+- ORM model test list updated to include the new `organizational_learnings`
+  table
+
+### Tests
+- 301 total: 244 unit + 57 integration (all green); 1 e2e skipped without keys
+- 9 new unit tests for resume payload application
+- 6 new integration tests for the HITL resumption path through the real
+  AsyncSqliteSaver checkpointer
+- 6 new integration tests for OrganizationalLearningRepository
+- 5 new integration tests for `persist_reflection_themes`
+
 ## [0.7.1] - 2026-05-06
 
 ### Documentation
@@ -205,7 +255,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Akash-1512/cascade/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Akash-1512/cascade/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Akash-1512/cascade/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Akash-1512/cascade/compare/v0.5.0...v0.6.0
