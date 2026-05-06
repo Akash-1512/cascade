@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     mcp_port: int = 8765
     mcp_auth_required: bool = True
 
+    # --- REST API ---------------------------------------------------------
+    api_auth_mode: Literal["dev", "jwt"] = "dev"
+    api_cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+
     @property
     def is_production(self) -> bool:
         """Return ``True`` when running in production environment."""

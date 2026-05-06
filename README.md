@@ -15,8 +15,24 @@ organizational memory layer designed to outlive the people who built it. It
 exposes its capabilities over the **Model Context Protocol** so the same data
 is queryable from Claude Desktop, Cursor, or any MCP-aware client.
 
+## Two integration surfaces
+
+cascade exposes its capabilities two ways:
+
+- **MCP server** — eight tools for Claude Desktop, Cursor, and any
+  MCP-aware client. The mutation surface; that's where the agent loop lives.
+  See [`docs/runbooks/mcp-server.md`](docs/runbooks/mcp-server.md).
+- **REST API** — read-side projection over OKRs, decisions, and
+  organizational learnings, with OpenAPI docs at `/docs`. For HTTP-only
+  clients and the upcoming Streamlit operator console. See
+  [`docs/runbooks/rest-api.md`](docs/runbooks/rest-api.md).
+
 ```bash
-python -m cascade.mcp.server   # 8 tools available in Claude Desktop in 3 lines of config
+# MCP server (stdio for Claude Desktop)
+python -m cascade.mcp.server
+
+# REST API
+uvicorn cascade.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## What makes it different
