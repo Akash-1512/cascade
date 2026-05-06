@@ -61,13 +61,26 @@ def _critique_json(verdict: str, min_score: float = 0.85) -> str:
     )
 
 
+def _alignment_json(verdict: str = "aligned", vertical: float = 0.9) -> str:
+    return json.dumps(
+        {
+            "vertical_score": vertical,
+            "vertical_reasoning": "Direct contribution to parent",
+            "conflicts": [],
+            "verdict": verdict,
+            "suggestions": [],
+        }
+    )
+
+
 @pytest.mark.integration
-async def test_graph_passes_on_first_critique() -> None:
-    """Drafter → Critic with verdict=pass terminates the run."""
+async def test_graph_passes_critique_and_alignment_on_first_run() -> None:
+    """Drafter → Critic (pass) → Aligner (aligned) terminates the run."""
     model = FakeChatModel(
         responses=[
             _good_proposal_json(),
             _critique_json("pass"),
+            _alignment_json("aligned"),
         ]
     )
     graph = build_graph(model=model)
@@ -78,19 +91,21 @@ async def test_graph_passes_on_first_critique() -> None:
     assert final["proposal"] is not None
     assert isinstance(final["proposal"], ProposedObjective)
     assert final["critique"].verdict == "pass"
+    assert final["alignment"].verdict == "aligned"
     assert len(final["iterations"]) == 1
     assert final.get("awaiting_human") is None
 
 
 @pytest.mark.integration
-async def test_graph_loops_then_passes() -> None:
-    """Drafter → Critic (revision) → Drafter → Critic (pass) terminates cleanly."""
+async def test_graph_loops_through_critic_then_aligns() -> None:
+    """Drafter → Critic (revision) → Drafter → Critic (pass) → Aligner (aligned)."""
     model = FakeChatModel(
         responses=[
             _good_proposal_json(),
             _critique_json("needs_revision", min_score=0.5),
             _good_proposal_json(),
             _critique_json("pass"),
+            _alignment_json("aligned"),
         ]
     )
     graph = build_graph(model=model)
@@ -99,8 +114,26 @@ async def test_graph_loops_then_passes() -> None:
     final = await graph.ainvoke(initial)
 
     assert final["critique"].verdict == "pass"
+    assert final["alignment"].verdict == "aligned"
     assert len(final["iterations"]) == 2
     assert final.get("awaiting_human") is None
+
+
+@pytest.mark.integration
+async def test_graph_escalates_on_alignment_blocked() -> None:
+    """Critic passes but Aligner finds a blocking conflict — escalate to human."""
+    model = FakeChatModel(
+        responses=[
+            _good_proposal_json(),
+            _critique_json("pass"),
+            _alignment_json("blocked", vertical=0.3),
+        ]
+    )
+    graph = build_graph(model=model)
+    final = await graph.ainvoke(OKRState(intent="x", trace_id="t-block"))
+
+    assert final["awaiting_human"] is not None
+    assert final["awaiting_human"].reason == "alignment_conflict"
 
 
 @pytest.mark.integration
@@ -149,6 +182,7 @@ async def test_graph_iterations_carry_proposal_and_critique() -> None:
             _critique_json("needs_revision", min_score=0.5),
             _good_proposal_json(),
             _critique_json("pass"),
+            _alignment_json("aligned"),
         ]
     )
     graph = build_graph(model=model)

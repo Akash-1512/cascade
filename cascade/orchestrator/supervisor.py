@@ -23,7 +23,7 @@ from cascade.orchestrator.state import OKRState
 # fixed in one revision; problems still present after three are usually structural.
 ITERATION_CAP = 3
 
-NodeName = Literal["drafter", "critic", "human", "__end__"]
+NodeName = Literal["drafter", "critic", "aligner", "human", "__end__"]
 
 
 def supervisor(state: OKRState) -> NodeName:
@@ -35,10 +35,13 @@ def supervisor(state: OKRState) -> NodeName:
        the human responds.
     2. If we have no proposal yet → ``drafter``.
     3. If we have a proposal but no critique → ``critic``.
-    4. If the critique verdict is ``pass`` → end successfully.
-    5. If the critique verdict is ``reject`` → escalate to human.
-    6. If the iteration cap has been reached → escalate to human.
-    7. Otherwise the verdict is ``needs_revision`` → loop back to ``drafter``.
+    4. If the critique verdict is ``reject`` → escalate to human.
+    5. If the critique verdict is ``needs_revision`` and we're under cap → ``drafter``.
+    6. If the critique verdict is ``needs_revision`` and at the cap → escalate to human.
+    7. If the critique verdict is ``pass`` and no alignment yet → ``aligner``.
+    8. If alignment verdict is ``blocked`` → escalate to human.
+    9. If alignment verdict is ``needs_review`` → escalate to human.
+    10. If alignment verdict is ``aligned`` → end successfully.
     """
     if state.awaiting_human is not None:
         return END  # type: ignore[return-value]
@@ -49,25 +52,40 @@ def supervisor(state: OKRState) -> NodeName:
     if state.critique is None:
         return "critic"
 
-    if state.critique.verdict == "pass":
-        return END  # type: ignore[return-value]
-
     if state.critique.verdict == "reject":
         return "human"
 
-    if state.iteration_count >= ITERATION_CAP:
+    if state.critique.verdict == "needs_revision":
+        if state.iteration_count >= ITERATION_CAP:
+            return "human"
+        return "drafter"
+
+    # Critique passed — move to alignment if we haven't already
+    if state.alignment is None:
+        return "aligner"
+
+    if state.alignment.verdict == "blocked":
         return "human"
 
-    return "drafter"
+    if state.alignment.verdict == "needs_review":
+        return "human"
+
+    # alignment.verdict == "aligned"
+    return END  # type: ignore[return-value]
 
 
 def make_human_escalation(state: OKRState) -> HumanInterrupt:
     """Build the :class:`HumanInterrupt` payload for the human node.
 
-    Encapsulates the difference between "the model gave up" and "we ran out of
-    iterations" so the UI can render an appropriate prompt.
+    Encapsulates the difference between the various escalation reasons so the UI
+    can render an appropriate prompt.
     """
-    if state.critique is not None and state.critique.verdict == "reject":
+    reason: str
+    if (state.alignment is not None and state.alignment.verdict == "blocked") or (
+        state.alignment is not None and state.alignment.verdict == "needs_review"
+    ):
+        reason = "alignment_conflict"
+    elif state.critique is not None and state.critique.verdict == "reject":
         reason = "fundamental_reject"
     else:
         reason = "iteration_cap_reached"
@@ -76,4 +94,6 @@ def make_human_escalation(state: OKRState) -> HumanInterrupt:
         "iteration_count": state.iteration_count,
         "iterations": [it.model_dump() for it in state.iterations],
     }
+    if state.alignment is not None:
+        payload["alignment"] = state.alignment.model_dump()
     return HumanInterrupt(reason=reason, payload=payload)  # type: ignore[arg-type]
