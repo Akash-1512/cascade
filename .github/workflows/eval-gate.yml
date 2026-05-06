@@ -39,9 +39,18 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        run: python -m cascade.evals.gate --output eval_results.json
+        run: |
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "::warning::GROQ_API_KEY not set — running eval gate with --use-fakes"
+            python -m cascade.evals.gate --use-fakes --output eval_results.json
+          else
+            python -m cascade.evals.gate --output eval_results.json
+          fi
 
       - name: Check thresholds
+        if: env.GROQ_API_KEY != ''
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python -m cascade.evals.check_thresholds eval_results.json
 
       - name: Upload eval results

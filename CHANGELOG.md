@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-06
+
+### Added
+- **Eval gate** — three eval families gating merges in CI. Threshold floors live
+  in `eval_data/thresholds.yaml`; loosening one requires an ADR.
+  - `drafting_f1` — Critic verdict agreement on a 30-case golden dataset
+    (10 pass / 10 needs_revision / 10 reject across 9 functional roles).
+    Threshold 0.85.
+  - `retrieval_f1` — Hybrid retrieval F1 on 10 memory-question cases with
+    self-contained corpora. Threshold 0.90.
+  - `red_team_pass_rate` — Adversarial robustness across 6 attack types
+    (vague injection, sandbagging, target gaming, prompt injection,
+    decision laundering, memory poisoning). Threshold 0.95.
+- `cascade.evals.gate` — runner that produces a structured `EvalReport`. Exits 0
+  even on metric failure so the report is uploadable as a CI artifact regardless.
+- `cascade.evals.check_thresholds` — separate gate step that exits non-zero on
+  regression and lists the top 5 failing case ids per breached metric.
+- `--use-fakes` mode for plumbing smoke tests without consuming Groq quota.
+- `--filter` and `--case-id` for narrow targeted runs.
+- Eval-gate runbook in `docs/runbooks/eval-gate.md` covering dataset structure,
+  failure modes, and how to add new cases or eval families.
+- Three datasets shipped: `eval_data/golden_okrs.jsonl`,
+  `eval_data/memory_questions.jsonl`, `eval_data/red_team_attacks.jsonl`.
+
+### Changed
+- `eval-gate.yml` workflow: falls back to `--use-fakes` when `GROQ_API_KEY` is
+  missing so the harness itself can be smoke-tested even without secrets
+  configured. Threshold check only runs when a real key is configured.
+
+### Tests
+- 275 total: 244 unit + 31 integration (all green); 1 e2e skipped without keys
+- 32 new tests: 11 dataset, 13 eval-module, 8 runner/threshold-checker
+
 ## [0.6.0] - 2026-05-05
 
 ### Added
@@ -151,7 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Akash-1512/cascade/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Akash-1512/cascade/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Akash-1512/cascade/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Akash-1512/cascade/compare/v0.3.0...v0.4.0
