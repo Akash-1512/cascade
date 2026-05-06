@@ -41,10 +41,17 @@ Bearer token via the `Authorization` header. Two modes:
 
 - **`api_auth_mode=dev`** — any UUID is accepted as the principal's `user_id`.
   Useful for curl, the Streamlit operator console, and any local development.
-- **`api_auth_mode=jwt`** — production. Real provider integration (Auth0,
-  Clerk, Cognito, ...) is the deployment's responsibility. Until wired in,
-  the dependency returns 503 — failing closed surfaces misconfiguration
-  immediately.
+- **`api_auth_mode=jwt`** — production. Verifies tokens against any provider
+  publishing a standard JWKS document (Auth0, AWS Cognito, Clerk, Keycloak,
+  Azure AD, ...). JWKS is fetched on first use and TTL-cached. Configure
+  via `CASCADE_API_JWKS_URL`, `CASCADE_API_JWT_ISSUER`,
+  `CASCADE_API_JWT_AUDIENCE`. See [`docs/runbooks/jwt-auth.md`](../../docs/runbooks/jwt-auth.md)
+  for provider-specific setup.
+
+Without configuration, JWT mode fails closed with a 503 that names the
+missing settings. Verification failures (expired, wrong issuer, bad
+signature, etc.) all return the same generic 401 — the specific reason is
+logged at INFO level, but never leaked to the caller.
 
 Routes opt into auth via the dependency — the requirement shows up in the
 generated OpenAPI document automatically.
