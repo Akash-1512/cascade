@@ -60,6 +60,10 @@ class _UUIDString(TypeDecorator[UUID]):
 def _patch_postgres_types_for_sqlite() -> None:
     """Substitute Postgres-only column types with portable equivalents.
 
+    Also drops Postgres-regex CHECK constraints — SQLite doesn't support the
+    ``~`` operator. Production deployments still get the regex enforcement;
+    test runs trade that for portability.
+
     Idempotent — calling twice is safe. We mutate the existing Table objects in place
     because the test runtime imports them transitively before this fixture runs.
     """
@@ -75,6 +79,17 @@ def _patch_postgres_types_for_sqlite() -> None:
                 column.type = JSON()
             elif isinstance(ctype, PG_UUID):
                 column.type = _UUIDString()
+
+        # Drop CHECK constraints that use Postgres regex (the `~` operator).
+        from sqlalchemy import CheckConstraint
+
+        regex_constraints = [
+            c
+            for c in table.constraints
+            if isinstance(c, CheckConstraint) and " ~ " in str(c.sqltext)
+        ]
+        for c in regex_constraints:
+            table.constraints.discard(c)
 
 
 def _resolve_test_url() -> str:
