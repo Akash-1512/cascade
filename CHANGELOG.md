@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05-06
+
+### Documentation
+- Top-level README rewritten for first-impression density. Leads with the
+  causal-memory differentiator, ASCII architecture diagram showing all six
+  agents and three storage tiers, quick-start commands, Claude Desktop config
+  block, full eight-tool table, repo layout, and stack rationale table.
+- Per-component README files for the four major subsystems:
+  `cascade/agents/README.md`, `cascade/memory/README.md`,
+  `cascade/mcp/README.md`, `cascade/evals/README.md`. Each documents purpose,
+  files, key design decisions, and testing surface.
+- CONTRIBUTING.md updated with the eval-gate workflow, accurate test
+  commands, the threshold-loosening process, and pointers to per-component
+  READMEs.
+- Architecture overview updated to reflect what's actually built: MCP server
+  as the primary surface, three eval families with thresholds, ChromaDB's
+  default ONNX MiniLM (no PyTorch), OpenAI as the fallback provider.
+
+This is a documentation-only release. No source code, behaviour, or test
+changes — 275 tests still pass, lint and format clean.
+
 ## [0.7.0] - 2026-05-06
 
 ### Added
@@ -184,7 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Akash-1512/cascade/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Akash-1512/cascade/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Akash-1512/cascade/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Akash-1512/cascade/compare/v0.4.0...v0.5.0
