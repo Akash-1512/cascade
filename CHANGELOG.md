@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-06
+
+### Added
+- **Demo seed script** so a reviewer cloning the repo sees populated content
+  end-to-end on first run. Seeds one team (slug `demo-team`), two users,
+  three OKRs across two quarters, eight decisions, and three organizational
+  learnings.
+- `make demo` and `make demo-reset` Makefile targets — idempotent first
+  run, explicit refresh on `--reset`. The script prints the team UUID for
+  pasting into the operator console sidebar.
+- `python -m cascade.scripts.seed_demo [--reset] [--verbose]` CLI for direct
+  invocation.
+- `cascade/scripts/demo_data.py` — plain-Python data classes defining the
+  seed content. Reviewers reading the demo data are reading what cascade is
+  *for* (real OKR titles, alternatives-considered decisions, recurring-
+  pattern learnings).
+- `cascade/scripts/seed_demo.py` — idempotent orchestrator. Slug-based team
+  lookup; first run creates everything; second run skips with a one-line
+  message; `--reset` wipes the demo team's rows (scoped strictly to its
+  team_id, never touches non-demo data) and re-seeds.
+- `cascade/scripts/README.md` per-component README documenting CLI
+  options, the idempotency contract, and the why-declared-as-data choice.
+
+### Changed
+- Top-level README quick-start now leads with `make demo` so the first
+  command after `pip install` produces a populated console.
+- Test-count badge and stack-table line updated from 275 to 349 (will be
+  365 after this release ships).
+- Operator console runbook replaces the manual `psql INSERT` example with
+  a pointer to `make demo`.
+- Makefile gets `demo` and `demo-reset` targets; `.PHONY` updated.
+
+### Tests
+- 365 total: 282 unit + 82 integration (all green); 1 e2e skipped without keys
+- 8 new unit tests for demo data referential integrity (every decision actor
+  resolves to a seeded user, every decision objective_title resolves to a
+  seeded OKR, KR weights sum to 1.0 per OKR, learning quarters match the
+  YYYYQ[1-4] format, decisions have alternatives or evidence, count
+  stability)
+- 8 new integration tests for the seed orchestrator (first-run counts, slug
+  lookup, decision references no orphans, double-run skip idempotency,
+  reset refresh keeps counts stable, reset preserves non-demo data, content
+  is real not Lorem ipsum)
+
+### Design choices documented
+- Slug-based team identifier (`demo-team`) rather than a hardcoded UUID —
+  human-readable and stable across runs.
+- Wipe scoped strictly to the demo team's id — running `--reset` against a
+  database with non-demo teams is safe; the test
+  `test_reset_does_not_touch_non_demo_data` guards this.
+- Demo data declared as plain dataclasses rather than algorithmically
+  generated — generated content looks like a benchmark, not like a real
+  team. Keeping the OKRs, decisions, and learnings written in human voice
+  makes them useful as a reading aid.
+
 ## [0.10.0] - 2026-05-06
 
 ### Added
@@ -356,7 +411,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Akash-1512/cascade/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Akash-1512/cascade/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Akash-1512/cascade/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Akash-1512/cascade/compare/v0.7.1...v0.8.0
