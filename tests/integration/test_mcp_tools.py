@@ -137,7 +137,7 @@ def _build_server(
 
 
 @pytest.mark.integration
-async def test_eight_tools_registered(sessionmaker) -> None:  # type: ignore[no-untyped-def]
+async def test_ten_tools_registered(sessionmaker) -> None:  # type: ignore[no-untyped-def]
     mcp, _ = _build_server(sessionmaker, responses=[])
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
@@ -150,6 +150,8 @@ async def test_eight_tools_registered(sessionmaker) -> None:  # type: ignore[no-
         "query_decisions",
         "assess_risk",
         "get_alignment",
+        "start_okr_draft",
+        "resume_okr_draft",
     }
 
 

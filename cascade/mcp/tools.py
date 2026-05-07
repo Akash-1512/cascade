@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from cascade.agents.aligner import check_alignment
 from cascade.agents.checkin_coach import run_checkin
@@ -33,6 +33,7 @@ from cascade.mcp.adapters import (
     to_alignment_view,
     to_decision_view,
     to_drafted_objective,
+    to_hitl_conflicts,
     to_objective_summary,
     to_objective_view,
     to_risk_view,
@@ -42,17 +43,25 @@ from cascade.mcp.schemas import (
     CheckInResult,
     DecisionView,
     DraftResult,
+    HitlCompleteInfo,
+    HitlPauseInfo,
     ObjectiveSummary,
     ObjectiveView,
+    ResumeOkrDraftResult,
     RiskAssessmentView,
     ScoreResult,
+    StartOkrDraftResult,
 )
+from cascade.orchestrator.graph import build_graph
+from cascade.orchestrator.resumption import resume as resume_graph
+from cascade.orchestrator.state import OKRState
 from cascade.storage.repositories import NotFoundError
 from cascade.storage.repositories.decision import DecisionRepository
 from cascade.storage.repositories.objective import ObjectiveRepository
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+    from langgraph.checkpoint.base import BaseCheckpointSaver
     from mcp.server.fastmcp import FastMCP
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -66,10 +75,16 @@ class AgentContext:
     Constructed once at server startup and shared across requests. Sessions are
     created per-request via the :func:`session` context manager so transactions
     are scoped to a single tool call.
+
+    The optional ``checkpointer`` is a long-lived LangGraph saver used by the
+    HITL-capable drafting tools (``start_okr_draft`` / ``resume_okr_draft``).
+    Tools that don't need it can ignore it; tools that do need it raise an
+    instructive error if it isn't wired in.
     """
 
     sessionmaker: async_sessionmaker[AsyncSession]
     model: BaseChatModel
+    checkpointer: BaseCheckpointSaver | None = None
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
@@ -81,6 +96,23 @@ class AgentContext:
             except Exception:
                 await s.rollback()
                 raise
+
+    def require_checkpointer(self) -> BaseCheckpointSaver:
+        """Return the checkpointer or raise if it isn't wired in.
+
+        Tools that need HITL resumption call this rather than reading the
+        attribute directly so the error message names what to fix.
+        """
+        if self.checkpointer is None:
+            raise RuntimeError(
+                "This tool requires a LangGraph checkpointer to support "
+                "human-in-the-loop resumption. Configure "
+                "CASCADE_MCP_CHECKPOINTER_PATH and ensure the MCP server was "
+                "built with build_server() (which opens the checkpointer for "
+                "you). If you constructed AgentContext directly in tests, "
+                "pass a checkpointer parameter."
+            )
+        return self.checkpointer
 
 
 def register_tools(mcp: FastMCP, ctx: AgentContext) -> None:
@@ -353,6 +385,169 @@ def register_tools(mcp: FastMCP, ctx: AgentContext) -> None:
             model=ctx.model,
         )
         return to_alignment_view(alignment, objective_id=str(objective.id))
+
+    # --- start_okr_draft (HITL-capable) -------------------------------------
+
+    @mcp.tool(
+        name="start_okr_draft",
+        description=(
+            "Start a HITL-capable OKR drafting run. Runs the Drafter, Critic, "
+            "and Aligner; if the Aligner blocks (resource conflict, vertical "
+            "drift, etc.) or the Critic loops past the iteration cap, the "
+            "graph pauses at the human node. The response carries a "
+            "thread_id and either the completed proposal (status='completed') "
+            "or the pause information (status='paused'). For paused runs, "
+            "call ``resume_okr_draft`` with the same thread_id and a "
+            "decision: 'commit' to accept the proposal as-is, 'revise' to "
+            "rerun the Drafter, or 'abandon' to terminate with an audit "
+            "marker. Drafts are NOT persisted as committed OKRs by this "
+            "tool — call your team's commit flow once the draft is aligned."
+        ),
+    )
+    async def start_okr_draft(intent: str) -> StartOkrDraftResult:
+        checkpointer = ctx.require_checkpointer()
+        graph = build_graph(model=ctx.model, checkpointer=checkpointer)
+        thread_id = str(uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+
+        result = await graph.ainvoke(OKRState(intent=intent), config=config)
+        return StartOkrDraftResult(
+            thread_id=thread_id,
+            state=_state_from_graph_result(graph, config, result),
+        )
+
+    # --- resume_okr_draft ---------------------------------------------------
+
+    @mcp.tool(
+        name="resume_okr_draft",
+        description=(
+            "Resume a paused HITL OKR drafting run. ``decision`` must be "
+            "'commit' (accept the latest proposal as-is — alignment is forced "
+            "to 'aligned' and any blocking conflicts are demoted to 'info'), "
+            "'revise' (clear the proposal and rerun the Drafter), or "
+            "'abandon' (terminate with a 'blocked' audit marker capturing "
+            "the abandonment). The run can pause again on revise — the "
+            "response carries the same shape as ``start_okr_draft`` and the "
+            "same thread_id can be passed back to ``resume_okr_draft`` to "
+            "continue."
+        ),
+    )
+    async def resume_okr_draft(
+        thread_id: str,
+        decision: str,
+        notes: str | None = None,
+    ) -> ResumeOkrDraftResult:
+        if decision not in ("commit", "revise", "abandon"):
+            raise ValueError(f"decision must be one of: commit, revise, abandon. Got {decision!r}")
+        checkpointer = ctx.require_checkpointer()
+        graph = build_graph(model=ctx.model, checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # Verify the thread exists before resuming — gives a clean error if
+        # the client passes a stale thread_id rather than letting LangGraph
+        # surface a less actionable error from inside resume().
+        snapshot = await graph.aget_state(config)
+        if snapshot is None or not snapshot.values:
+            raise ValueError(
+                f"No paused draft found for thread_id={thread_id!r}. The "
+                "thread may have been completed already, or the checkpointer "
+                "may have been reset (in-memory checkpointers do not survive "
+                "server restart)."
+            )
+
+        result = await resume_graph(
+            graph=graph,
+            thread_id=thread_id,
+            decision=decision,  # type: ignore[arg-type]
+            notes=notes,
+        )
+        return ResumeOkrDraftResult(
+            thread_id=thread_id,
+            state=_state_from_graph_result(graph, config, result),
+        )
+
+
+def _state_from_graph_result(
+    graph,  # type: ignore[no-untyped-def]
+    config: dict,  # type: ignore[type-arg]
+    result: dict,  # type: ignore[type-arg]
+) -> HitlPauseInfo | HitlCompleteInfo:
+    """Inspect a graph invocation result and return the matching HITL state.
+
+    LangGraph signals a paused run via the ``__interrupt__`` field in the
+    result dict. When present we return :class:`HitlPauseInfo`; when absent
+    the run is complete and we return :class:`HitlCompleteInfo`.
+
+    The proposal and alignment are read from the result dict's keys (which
+    have the merged state including any updates from the most recent node).
+    For paused runs, alignment may be None (the Critic rejected before the
+    Aligner ran); for completed runs it is always present (the supervisor
+    only reaches END after alignment is set).
+    """
+    iterations = result.get("iterations") or []
+    iteration_count = len(iterations)
+
+    proposal_view = None
+    if result.get("proposal") is not None:
+        proposal_view = to_drafted_objective(result["proposal"])
+
+    alignment = result.get("alignment")
+    alignment_verdict = alignment.verdict if alignment is not None else None
+    alignment_summary = alignment.vertical_reasoning if alignment is not None else None
+    conflicts = to_hitl_conflicts(alignment)
+    suggestions = list(alignment.suggestions) if alignment is not None else []
+
+    interrupt_marker = result.get("__interrupt__")
+    if interrupt_marker:
+        # LangGraph 1.0+ surfaces interrupts as a tuple of Interrupt objects.
+        # The interrupt's ``value`` carries whatever payload the human node
+        # passed to interrupt() — for cascade that includes the reason.
+        reason = "awaiting_human"
+        try:
+            first = (
+                interrupt_marker[0]
+                if isinstance(interrupt_marker, list | tuple)
+                else interrupt_marker
+            )
+            if hasattr(first, "value") and isinstance(first.value, dict):
+                reason = first.value.get("reason", reason)
+        except (IndexError, AttributeError, TypeError):
+            pass
+
+        return HitlPauseInfo(
+            reason=reason,
+            iteration_count=iteration_count,
+            proposal=proposal_view,
+            alignment_verdict=alignment_verdict,
+            alignment_summary=alignment_summary,
+            conflicts=conflicts,
+            suggestions=suggestions,
+        )
+
+    # Completed run — proposal and alignment must both be present for the
+    # supervisor to have routed to END. If they aren't, it means we hit a
+    # terminal "abandoned" path; surface that with whatever proposal we have.
+    if proposal_view is None:
+        # Defensive — shouldn't happen in practice but better to fail loudly
+        # than to return an inconsistent HitlCompleteInfo.
+        raise RuntimeError(
+            "Graph completed but no proposal in state. This indicates a "
+            "supervisor bug — the supervisor should not route to END without "
+            "a proposal."
+        )
+    if alignment_verdict is None:
+        # Synthesise a 'blocked' verdict for runs that completed without
+        # alignment (e.g. abandoned during pre-Aligner phases).
+        alignment_verdict = "blocked"
+        alignment_summary = "Run completed without alignment"
+
+    return HitlCompleteInfo(
+        proposal=proposal_view,
+        alignment_verdict=alignment_verdict,
+        alignment_summary=alignment_summary,
+        conflicts=conflicts,
+        iteration_count=iteration_count,
+    )
 
 
 def _resolve_status(
