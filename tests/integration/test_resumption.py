@@ -186,7 +186,8 @@ async def test_resume_with_revise_decision_returns_to_drafter() -> None:
 
 @pytest.mark.integration
 async def test_resume_with_abandon_decision_terminates_with_audit_marker() -> None:
-    """Human abandons — final state is blocked with an audit conflict."""
+    """Human abandons — final state is blocked with an audit conflict and the
+    run actually terminates (no ``__interrupt__`` in the result)."""
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         model = FakeChatModel(
             responses=[
@@ -210,6 +211,13 @@ async def test_resume_with_abandon_decision_terminates_with_audit_marker() -> No
         assert final["alignment"].verdict == "blocked"
         assert any(
             "No longer relevant for Q2" in c.description for c in final["alignment"].conflicts
+        )
+        # The run must actually terminate — no pause, no interrupt marker.
+        # A buggy abandon (clearing awaiting_human) would route back to the
+        # human node and re-pause; the supervisor's awaiting_human-is-set
+        # rule is what makes abandon truly terminal.
+        assert "__interrupt__" not in final, (
+            "Abandon should terminate the run; got a pause marker in the result"
         )
 
 

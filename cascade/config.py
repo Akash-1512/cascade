@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     mcp_host: str = "0.0.0.0"  # noqa: S104 — bind all interfaces inside container
     mcp_port: int = 8765
     mcp_auth_required: bool = True
+    # Path for the LangGraph checkpointer used by HITL-capable MCP tools.
+    # Default ":memory:" means paused drafts don't survive a server restart;
+    # set to a file path (e.g. /var/lib/cascade/checkpoint.db) for durability.
+    mcp_checkpointer_path: str = ":memory:"
 
     # --- REST API ---------------------------------------------------------
     api_auth_mode: Literal["dev", "jwt"] = "dev"
