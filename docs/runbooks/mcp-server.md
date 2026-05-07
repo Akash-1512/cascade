@@ -120,7 +120,79 @@ coaching message. If the user mentioned a target change in the narrative, the
 Coach captures it as a decision — but persistence requires explicit human
 confirmation in a follow-up call.
 
-## Notes on transport choice
+## Human-in-the-loop drafting
+
+`start_okr_draft` and `resume_okr_draft` together support pause-and-resume
+drafting. When the orchestrator graph pauses on an alignment conflict or the
+Critic loops past the iteration cap, the tool returns a paused state with a
+`thread_id`. The client passes that `thread_id` back to `resume_okr_draft`
+with a decision once a human has weighed in.
+
+```text
+start_okr_draft(intent="...")
+        │
+        ▼
+LangGraph runs Drafter → Critic → Aligner
+        │
+        ├── Aligned → returns {status: "completed", proposal, verdict}
+        │
+        └── Blocked / iteration cap → returns {status: "paused",
+                                                thread_id: "...",
+                                                reason: "alignment_conflict",
+                                                conflicts: [...]}
+
+resume_okr_draft(thread_id, decision, notes)
+        │
+        ├── decision="commit" → force aligned, demote blocking conflicts
+        │                         to info, complete
+        │
+        ├── decision="revise" → clear proposal, rerun Drafter (may pause
+        │                         again on the next pass)
+        │
+        └── decision="abandon" → mark blocked with audit conflict carrying
+                                   the abandonment notes, complete
+```
+
+State lives in the LangGraph checkpointer, an `AsyncSqliteSaver` opened at
+server startup. By default the checkpointer is in-memory — paused drafts
+don't survive a server restart. Set `CASCADE_MCP_CHECKPOINTER_PATH` to a
+file path for durable pauses:
+
+```bash
+export CASCADE_MCP_CHECKPOINTER_PATH=/var/lib/cascade/checkpoint.db
+```
+
+The directory must exist and be writable by the MCP server process.
+
+### Example flow from Claude Desktop
+
+```
+User: Draft an OKR for the Q2 SMB conversion focus.
+
+[Claude calls start_okr_draft with intent="Q2 SMB conversion focus"]
+[Returns: status="paused", reason="alignment_conflict",
+          thread_id="...",
+          conflicts=[{description: "Both OKRs need the same engineering capacity",
+                      severity: "blocking"}]]
+
+Claude: I drafted the OKR but the Aligner flagged a blocking conflict —
+the proposed KR competes with the v2 retention engine work for the same
+backend capacity. You can:
+  1. Commit anyway (we accept the resource contention)
+  2. Revise the draft (I'll try a different KR shape)
+  3. Abandon
+
+User: Let's revise — change the third KR to be qualitative instead.
+
+[Claude calls resume_okr_draft(thread_id, "revise",
+                               notes="Make KR3 qualitative")]
+[Returns: status="completed", proposal=<new draft>, verdict="aligned"]
+
+Claude: Here's the revised draft, now aligned:
+...
+```
+
+
 
 - **stdio** — single-client, launched by Claude Desktop / Cursor. The simplest
   path. Lowest latency. No network exposure.

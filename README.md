@@ -7,7 +7,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12+-blue.svg">
   <img alt="Tests: 349 passing" src="https://img.shields.io/badge/tests-349%20passing-brightgreen">
-  <img alt="MCP: 8 tools" src="https://img.shields.io/badge/MCP-8%20tools-blueviolet">
+  <img alt="MCP: 10 tools" src="https://img.shields.io/badge/MCP-10%20tools-blueviolet">
 </p>
 
 cascade is an OKR governance platform with multi-agent AI coaching and an
@@ -19,7 +19,7 @@ is queryable from Claude Desktop, Cursor, or any MCP-aware client.
 
 cascade exposes its capabilities three ways:
 
-- **MCP server** — eight tools for Claude Desktop, Cursor, and any
+- **MCP server** — ten tools for Claude Desktop, Cursor, and any
   MCP-aware client. The mutation surface; that's where the agent loop lives.
   See [`docs/runbooks/mcp-server.md`](docs/runbooks/mcp-server.md).
 - **REST API** — read-side projection over OKRs, decisions, and
@@ -80,7 +80,7 @@ Three concrete capabilities that off-the-shelf OKR tools don't ship:
                                     ▲
                                     │
                               MCP server
-                              (8 tools)
+                              (10 tools)
                                     ▲
                                     │
                           Claude Desktop / Cursor
@@ -158,6 +158,8 @@ Restart Claude Desktop. The eight cascade tools become available:
 | `query_decisions` | Causal trail for an Objective |
 | `assess_risk` | Risk Sentinel agent with intervention recommendations |
 | `get_alignment` | Aligner agent with vertical and horizontal checks |
+| `start_okr_draft` | HITL-capable draft — pauses on alignment conflicts |
+| `resume_okr_draft` | Resume a paused draft with commit / revise / abandon |
 
 Full configuration and examples in
 [`docs/runbooks/mcp-server.md`](docs/runbooks/mcp-server.md).

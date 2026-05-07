@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-06
+
+### Added
+- **Two new MCP tools — `start_okr_draft` and `resume_okr_draft`** —
+  expose the HITL pause-and-resume flow from v0.8.0 to MCP clients (Claude
+  Desktop, Cursor, etc.). The MCP server now ships with 10 tools, up from 8.
+- `start_okr_draft(intent)` runs the LangGraph orchestrator with a
+  checkpointer attached. If the Aligner blocks or the Critic loops past the
+  iteration cap, the tool returns `state.status == "paused"` with the
+  reason, the proposal so far, and any blocking conflicts. Otherwise it
+  returns `state.status == "completed"` with the aligned proposal.
+- `resume_okr_draft(thread_id, decision, notes?)` resumes a paused run.
+  Decisions are `"commit"` (force aligned, demote blocking conflicts to
+  info), `"revise"` (clear proposal, rerun Drafter — can pause again), or
+  `"abandon"` (terminate with audit conflict carrying the abandonment notes).
+- New wire schemas in `cascade.mcp.schemas`: `HitlPauseInfo`,
+  `HitlCompleteInfo`, `StartOkrDraftResult`, `ResumeOkrDraftResult`.
+- New adapter `cascade.mcp.adapters.to_hitl_conflicts` for surfacing
+  AlignmentConflicts on the wire.
+- New setting `mcp_checkpointer_path` (default `":memory:"`) — set to a
+  file path for paused drafts that survive server restarts.
+- `AgentContext` gains an optional `checkpointer` field plus a
+  `require_checkpointer()` method that raises an instructive error when a
+  HITL tool is invoked without one wired in.
+- `cascade/mcp/server.py` opens an `AsyncSqliteSaver` at startup via
+  `aiosqlite.connect()`, runs `setup()`, registers tools with the saver,
+  closes the connection on shutdown.
+
+### Fixed
+- **Latent v0.8.0 bug in `_abandon_diff`.** The previous behaviour
+  cleared `awaiting_human` on abandon, but the human node on the original
+  invocation never wrote `awaiting_human` (it used the `interrupt()`
+  primitive instead), so the field defaulted to `None` and clearing it had
+  no effect. Execution fell through to "alignment.verdict == blocked →
+  route to human", calling `interrupt()` again and re-pausing — abandon
+  never actually terminated. The orchestrator integration test only
+  asserted the alignment shape, not whether the run terminated cleanly,
+  so the bug went unnoticed.
+
+  The MCP integration tests added in this release surfaced it: `abandon`
+  was returning `state.status == "paused"` instead of `"completed"`. Fix:
+  `_abandon_diff` now sets `awaiting_human` to a fresh
+  `HumanInterrupt(reason="abandoned", payload={...})`. The supervisor's
+  first routing rule fires (`if awaiting_human is set, return END`) and the
+  run truly terminates. The wire surface now also distinguishes "abandoned"
+  from a regular alignment-blocked pause.
+- `HumanInterrupt.reason` Literal extended to include `"abandoned"` for
+  the new terminal marker.
+
+### Changed
+- `cascade/orchestrator/resumption.py::_abandon_diff` rewritten with the
+  awaiting_human-as-marker pattern documented in detail; the docstring
+  explains why clearing the field would re-pause the run.
+- `cascade/mcp/README.md` reorganised into read-side and mutating tables;
+  HITL flow documented with an end-to-end Claude Desktop conversation example.
+- `docs/runbooks/mcp-server.md` adds a "Human-in-the-loop drafting"
+  section with an ASCII state diagram and a worked example.
+- Test count badge on top-level README updated to 400 (399 + 1 new from
+  the HumanInterrupt Literal expansion).
+
+### Tests
+- 400 total: 312 unit + 87 integration (all green); 1 e2e skipped without keys
+- 9 new integration tests for the HITL MCP tools covering: completed-on-
+  first-pass, paused-on-block, no-checkpointer surfaces an error, commit
+  resumes to completion with conflicts demoted, revise reruns the Drafter
+  and can complete on the second pass, abandon completes with the audit
+  conflict carrying the notes, invalid decision rejected at the tool
+  boundary, unknown thread_id surfaces a clear error, thread_ids are unique
+  across calls.
+- Existing `test_eight_tools_registered` renamed to
+  `test_ten_tools_registered` with the two new tool names added.
+- Strengthened `test_resume_with_abandon_decision_terminates_with_audit_marker`
+  in `tests/integration/test_resumption.py` to also assert
+  `"__interrupt__" not in final` — would have caught the v0.8.0 bug had
+  it existed at the time.
+- Updated unit test `test_abandon_clears_awaiting_human` →
+  `test_abandon_sets_awaiting_human_with_abandoned_reason` to codify the
+  corrected contract.
+
+### Design choices documented
+- `awaiting_human` as a "supervisor terminal signal" rather than just a
+  pause marker. Setting it (with any non-None value) tells the supervisor
+  to route to END regardless of other state. This wasn't documented in
+  v0.8.0; v0.13.0's `_abandon_diff` docstring spells it out.
+- Same generic `state` shape for `start_okr_draft` and `resume_okr_draft`
+  results (`HitlPauseInfo | HitlCompleteInfo`), so a client handles both
+  uniformly. Pausing again on `revise` is the same shape as the original
+  pause — the client just keeps calling `resume_okr_draft` with the same
+  `thread_id` until the response is `completed`.
+- Lazy connection lifecycle: `aiosqlite` connection is opened with
+  `asyncio.run()` at server startup (FastMCP's `run()` is the long-lived
+  blocking call after that) and closed with another `asyncio.run()` on
+  shutdown. aiosqlite connections are loop-agnostic on the same thread,
+  so this works.
+
 ## [0.12.0] - 2026-05-06
 
 ### Added
@@ -474,7 +569,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/Akash-1512/cascade/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Akash-1512/cascade/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Akash-1512/cascade/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Akash-1512/cascade/compare/v0.9.0...v0.10.0

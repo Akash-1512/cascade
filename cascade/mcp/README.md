@@ -1,21 +1,60 @@
 # cascade.mcp
 
-The Model Context Protocol surface — eight tools that MCP clients (Claude
+The Model Context Protocol surface — ten tools that MCP clients (Claude
 Desktop, Cursor, any MCP-compatible agent) use to draft, score, align, and
 check in on OKRs.
 
-## The eight tools
+## The ten tools
+
+### Read-side
 
 | Tool | Inputs | Returns | Backed by |
 |---|---|---|---|
 | `list_okrs` | `team_id`, `quarter?` | `list[ObjectiveSummary]` | `ObjectiveRepository.list_for_team` |
 | `get_okr` | `objective_id` | `ObjectiveView` | `ObjectiveRepository.get` |
-| `draft_okr` | `intent` | `DraftResult` (proposal + verdict) | `draft_objective` + `critique_proposal` |
 | `score_okr` | `objective_id` | `ScoreResult` (per-KR breakdown) | Domain `score` properties |
-| `log_checkin` | KR + progress + narrative | `CheckInResult` | `run_checkin` + `CheckInORM.save` |
 | `query_decisions` | `objective_id`, `limit?` | `list[DecisionView]` | `DecisionRepository.list_for_objective` |
 | `assess_risk` | `objective_id`, `weeks_elapsed?` | `RiskAssessmentView` | `assess_risk` agent |
 | `get_alignment` | `objective_id` | `AlignmentResultView` | `check_alignment` agent |
+
+### Mutating / agent-driving
+
+| Tool | Inputs | Returns | Backed by |
+|---|---|---|---|
+| `draft_okr` | `intent` | `DraftResult` (proposal + verdict) | `draft_objective` + `critique_proposal` |
+| `log_checkin` | KR + progress + narrative | `CheckInResult` | `run_checkin` + `CheckInORM.save` |
+| `start_okr_draft` | `intent` | `StartOkrDraftResult` (paused or completed) | LangGraph + checkpointer |
+| `resume_okr_draft` | `thread_id`, `decision`, `notes?` | `ResumeOkrDraftResult` | `resume()` helper |
+
+## HITL drafting flow
+
+`start_okr_draft` and `resume_okr_draft` together expose the pause-and-resume
+flow that the orchestrator graph supports via LangGraph's `interrupt()`
+primitive. The pattern from a Claude Desktop conversation:
+
+1. User asks Claude to draft an OKR. Claude calls `start_okr_draft(intent="...")`.
+2. The graph runs Drafter → Critic → Aligner. If everything aligns, the tool
+   returns `state.status == "completed"` and Claude shows the user the
+   proposal.
+3. If the Aligner blocks (a resource conflict with a peer OKR, vertical
+   drift from the parent, etc.) or the Critic loops past the iteration cap,
+   the graph pauses. The tool returns `state.status == "paused"` with the
+   reason, the proposal so far, and any blocking conflicts. Claude shows
+   the user what's blocking and asks how to proceed.
+4. The user decides: commit the proposal anyway, ask for a revision, or
+   abandon. Claude calls `resume_okr_draft(thread_id, decision, notes)`.
+5. The graph resumes from the paused state. On `commit`, it forces alignment
+   to "aligned" and demotes blocking conflicts to info, then completes. On
+   `revise`, it clears the proposal and runs the Drafter again — this can
+   pause again, in which case the tool returns another `paused` state with
+   the same `thread_id`. On `abandon`, it terminates with an audit-trail
+   alignment showing the abandonment reason.
+
+The `thread_id` is opaque — the client just passes it back. The state lives
+in the LangGraph checkpointer (`AsyncSqliteSaver`) for the duration of the
+MCP server process. Set `CASCADE_MCP_CHECKPOINTER_PATH` to a file path to
+preserve paused drafts across server restarts; the default `:memory:` keeps
+them only for the current process.
 
 ## Files
 

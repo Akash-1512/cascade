@@ -157,3 +157,24 @@ def to_alignment_view(alignment: AlignmentResult, *, objective_id: str) -> Align
         verdict=alignment.verdict,
         suggestions=list(alignment.suggestions),
     )
+
+
+def to_hitl_conflicts(alignment: AlignmentResult | None) -> list:
+    """Convert an alignment's conflicts into HITL wire conflicts.
+
+    Returns ``[]`` when ``alignment`` is None, so callers can pass either a
+    real alignment or the unset value uniformly.
+    """
+    from cascade.mcp.schemas import HitlConflictView
+
+    if alignment is None:
+        return []
+    return [
+        HitlConflictView(
+            conflict_type=c.conflict_type,
+            description=c.description,
+            severity=c.severity,
+            peer_title=c.peer_title,
+        )
+        for c in alignment.conflicts
+    ]
