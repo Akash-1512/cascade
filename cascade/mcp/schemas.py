@@ -188,3 +188,72 @@ class AlignmentResultView(BaseModel):
     conflicts: list[AlignmentConflictView]
     verdict: Literal["aligned", "needs_review", "blocked"]
     suggestions: list[str]
+
+
+# --- HITL drafting tool schemas ---------------------------------------------
+
+
+class HitlConflictView(BaseModel):
+    """A single alignment conflict surfaced when a draft pauses for human review."""
+
+    conflict_type: Literal["scope", "resource", "priority", "metric", "timeline"]
+    description: str
+    severity: Literal["info", "warning", "blocking"]
+    peer_title: str | None = None
+
+
+class HitlPauseInfo(BaseModel):
+    """Information about a paused HITL draft, returned to the MCP client.
+
+    Carries everything the client needs to surface the pause to a human and
+    collect a decision: the proposal so far, the alignment verdict and any
+    blocking conflicts, the iteration count, and the reason the supervisor
+    routed to the human node.
+    """
+
+    status: Literal["paused"] = "paused"
+    reason: str
+    iteration_count: int
+    proposal: DraftedObjective | None = None
+    alignment_verdict: Literal["aligned", "needs_review", "blocked"] | None = None
+    alignment_summary: str | None = None
+    conflicts: list[HitlConflictView] = []
+    suggestions: list[str] = []
+
+
+class HitlCompleteInfo(BaseModel):
+    """Final state of a HITL draft that completed (aligned or terminally rejected)."""
+
+    status: Literal["completed"] = "completed"
+    proposal: DraftedObjective
+    alignment_verdict: Literal["aligned", "needs_review", "blocked"]
+    alignment_summary: str | None = None
+    conflicts: list[HitlConflictView] = []
+    iteration_count: int
+
+
+class StartOkrDraftResult(BaseModel):
+    """Result of the ``start_okr_draft`` tool.
+
+    The ``state`` field is one of :class:`HitlPauseInfo` or
+    :class:`HitlCompleteInfo` distinguished by ``state.status``. The
+    ``thread_id`` is opaque to the client and must be passed back to
+    ``resume_okr_draft`` to continue a paused run.
+    """
+
+    thread_id: str
+    state: HitlPauseInfo | HitlCompleteInfo
+
+
+class ResumeOkrDraftResult(BaseModel):
+    """Result of the ``resume_okr_draft`` tool.
+
+    Same shape as :class:`StartOkrDraftResult`. The same draft can pause
+    again on a subsequent revision (the user asked to revise; the next
+    drafter pass produced a proposal that the Aligner blocked again);
+    callers handle that by calling ``resume_okr_draft`` again with the same
+    ``thread_id``.
+    """
+
+    thread_id: str
+    state: HitlPauseInfo | HitlCompleteInfo
