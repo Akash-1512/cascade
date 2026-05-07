@@ -146,7 +146,24 @@ def _abandon_diff(state: OKRState, notes: str | None) -> dict[str, object]:
 
     Alignment is forced to ``blocked`` with an audit conflict capturing the
     abandonment so the trail records what the human did and why.
+
+    ``awaiting_human`` is set to a fresh ``HumanInterrupt(reason="abandoned")``.
+    This serves two purposes:
+
+    1. The supervisor's first routing rule is "if awaiting_human is set,
+       return END". Without this marker, execution would fall through to
+       "alignment.verdict == blocked → route to human", calling interrupt()
+       again and re-pausing the run. (This was a latent v0.8.0 bug. The
+       human node on the first invocation never wrote ``awaiting_human``
+       because it used the ``interrupt()`` primitive instead, so the field
+       defaulted to ``None`` post-resume — clearing it had no effect, and
+       leaving it untouched also had no effect.)
+    2. The wire surface (HitlPauseInfo / HitlCompleteInfo) can render
+       "abandoned" as the reason, distinguishing this terminal state from
+       a regular alignment-blocked pause.
     """
+    from cascade.agents.contracts import HumanInterrupt
+
     abandon_marker = AlignmentResult(
         vertical_score=0.0,
         vertical_reasoning=(
@@ -169,7 +186,10 @@ def _abandon_diff(state: OKRState, notes: str | None) -> dict[str, object]:
     )
     return {
         "alignment": abandon_marker,
-        "awaiting_human": None,
+        "awaiting_human": HumanInterrupt(
+            reason="abandoned",
+            payload={"notes": notes} if notes else {},
+        ),
     }
 
 

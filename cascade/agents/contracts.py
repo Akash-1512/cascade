@@ -146,6 +146,7 @@ class HumanInterrupt(BaseModel):
         "target_change",
         "kr_descope",
         "risk_intervention",
+        "abandoned",
     ]
     payload: dict[str, object] = Field(default_factory=dict)
 

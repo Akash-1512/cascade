@@ -144,11 +144,27 @@ def test_abandon_synthesises_blocked_audit_marker() -> None:
 
 
 @pytest.mark.unit
-def test_abandon_clears_awaiting_human() -> None:
+def test_abandon_sets_awaiting_human_with_abandoned_reason() -> None:
+    """Abandon must set ``awaiting_human`` to a HumanInterrupt with reason='abandoned'.
+
+    Two reasons:
+    1. The supervisor's first routing rule is "if awaiting_human is set,
+       return END". Without this marker the run wouldn't terminate — it
+       would fall through to "alignment.blocked → route to human", calling
+       interrupt() again and re-pausing.
+    2. The wire surface can render "abandoned" as the reason, distinguishing
+       this terminal state from a regular alignment-blocked pause.
+    """
     state = _saved_state()
-    diff = apply_resume_payload(state=state, payload={"decision": "abandon"})
-    # Abandon clears awaiting_human so the supervisor doesn't loop back to human
-    assert diff["awaiting_human"] is None
+    diff = apply_resume_payload(
+        state=state,
+        payload={"decision": "abandon", "notes": "no longer relevant"},
+    )
+    interrupt_marker = diff["awaiting_human"]
+    assert interrupt_marker is not None
+    assert interrupt_marker.reason == "abandoned"  # type: ignore[union-attr]
+    # Notes are preserved on the marker payload for the audit trail.
+    assert "no longer relevant" in str(interrupt_marker.payload)  # type: ignore[union-attr]
 
 
 @pytest.mark.unit
