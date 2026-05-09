@@ -6,7 +6,7 @@
   <a href="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12+-blue.svg">
-  <img alt="Tests: 349 passing" src="https://img.shields.io/badge/tests-349%20passing-brightgreen">
+  <img alt="Tests: 415 passing" src="https://img.shields.io/badge/tests-415%20passing-brightgreen">
   <img alt="MCP: 10 tools" src="https://img.shields.io/badge/MCP-10%20tools-blueviolet">
 </p>
 
@@ -20,12 +20,14 @@ is queryable from Claude Desktop, Cursor, or any MCP-aware client.
 cascade exposes its capabilities three ways:
 
 - **MCP server** — ten tools for Claude Desktop, Cursor, and any
-  MCP-aware client. The mutation surface; that's where the agent loop lives.
+  MCP-aware client. Where the agent loop lives — drafting, alignment,
+  HITL pause-and-resume, mid-life target changes flow through here.
   See [`docs/runbooks/mcp-server.md`](docs/runbooks/mcp-server.md).
-- **REST API** — read-side projection over OKRs, decisions, and
-  organizational learnings, with OpenAPI docs at `/docs`. For HTTP-only
-  clients and the operator console. See
-  [`docs/runbooks/rest-api.md`](docs/runbooks/rest-api.md).
+- **REST API** — read endpoints for OKRs, decisions, and organizational
+  learnings, plus mutation endpoints for committing aligned drafts,
+  logging decisions and check-ins, and recording learnings. OpenAPI docs
+  at `/docs`. For HTTP clients, CI pipelines, and the operator console.
+  See [`docs/runbooks/rest-api.md`](docs/runbooks/rest-api.md).
 - **Operator console** — Streamlit UI built on the REST API. Read-only
   viewer for OKRs, KRs, decision trails, and learning themes. See
   [`docs/runbooks/operator-console.md`](docs/runbooks/operator-console.md).
@@ -109,7 +111,7 @@ alembic upgrade head
 make demo                   # idempotent; make demo-reset to wipe and refresh
 
 # Run the test suite
-pytest                      # 349 tests, ~10 seconds
+pytest                      # 415 tests, ~12 seconds
 pytest -m unit              # unit only
 pytest --cov=cascade        # with coverage
 
@@ -205,7 +207,7 @@ tests/
 | Retrieval | BM25 + dense + LLM cross-encoder rerank | Each catches what the others miss; ADR-0003 |
 | Persistence | SQLAlchemy 2.0 async + Alembic | Async sessions, repository pattern, migration history |
 | MCP server | FastMCP | Auto-derives JSON schemas from Pydantic types |
-| Tests | pytest + pytest-asyncio | 349 tests in ~10 seconds with SQLite override |
+| Tests | pytest + pytest-asyncio | 415 tests in ~12 seconds with SQLite override |
 | Eval gate | Custom Pydantic-typed harness | Drafting F1 + retrieval F1 + red-team pass rate |
 | CI | GitHub Actions | Lint, types, unit, integration, build, eval, security |
 

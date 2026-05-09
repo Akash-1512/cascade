@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-06
+
+### Added
+- **Four POST endpoints** turning the REST API from read-only into a full
+  read/write surface. The new endpoints all require authentication via the
+  v0.12.0 JWT verifier (or the dev-mode UUID bearer token).
+- `POST /v1/teams/{team_id}/okrs` — commit an Objective from an aligned
+  draft proposal. Verifies the team and (optional) parent OKR exist
+  before creating; 404 with the missing id named on either failure.
+  Typical caller is a script that ran `start_okr_draft` →
+  `resume_okr_draft(commit)` on the MCP side and wants to persist the
+  result over HTTP rather than via another MCP call.
+- `POST /v1/okrs/{objective_id}/decisions` — append a Decision to an
+  Objective's causal trail. Captures alternatives considered, chosen
+  option, tradeoff accepted, and supporting evidence — the structured
+  causal data that powers `query_decisions` later.
+- `POST /v1/key-results/{key_result_id}/checkins` — log a CheckIn
+  against a KR. Without an explicit `new_status`, status is derived from
+  `confidence` (high → on_track, medium → at_risk, low → off_track),
+  matching the rule in MCP `log_checkin` so REST and MCP produce
+  identical state shapes for the same input.
+- `POST /v1/teams/{team_id}/learnings` — record an organizational
+  learning theme. `supersedes_id` lets new versions link to predecessors
+  for an audit trail without destructive overwrites.
+- New wire schemas in `cascade.api.schemas`: `DecisionCreateRequest`,
+  `CheckInCreateRequest`, `CheckInResponse`, `LearningCreateRequest`,
+  `KeyResultCreateRequest`, `ObjectiveCreateRequest`, plus
+  `AlternativeRequest` and `EvidenceRequest` building blocks. All
+  with `extra="forbid"` so unexpected fields fail loudly at the boundary.
+- New route module `cascade/api/routes/checkins.py`. Other endpoints
+  extend their existing route modules.
+
+### Changed
+- All POST endpoints return 201 with the canonical resource body and a
+  `Location` header pointing at the GET path. Clients can use the
+  response directly without re-fetching.
+- `actor_id` (decisions) and `author_id` (check-ins) default to the JWT
+  principal's user_id but can be overridden in the body. The override
+  exists for service accounts that record events on behalf of a real
+  user — the human's id goes in the body, the service's identity is the
+  principal. Audit-trail correctness without forcing CI pipelines to
+  share real user JWTs.
+- `cascade/api/routes/okrs.py` module docstring updated: "Read endpoints
+  plus a single creation endpoint for committing aligned proposals
+  into persistent state. Mid-life mutations (target changes, descopes,
+  replacements) flow through MCP because they involve the agent loop;
+  pure persistence of an aligned draft is fine over REST."
+- `cascade/api/main.py` description updated to reflect the read/write
+  surface.
+- `cascade/api/README.md` reorganised into Read and Mutations tables
+  with a "Why the read/mutate split" rationale section explaining that
+  the split is usage-pattern-based (REST when the caller knows the
+  answer, MCP when the agent does), not a layer boundary — both call
+  the same domain repositories.
+- `docs/runbooks/rest-api.md` adds curl examples for all four POST
+  endpoints, with realistic payloads matching the demo seed content
+  (SMB conversion focus, KR target lowering after pricing audit, CSM
+  adoption friction learning).
+
+### Tests
+- 415 total: 322 unit + 92 integration (all green); 1 e2e skipped without keys
+- 15 new integration tests in `tests/integration/test_api_mutations.py`:
+  - `POST /v1/okrs/{id}/decisions`: 201 with Location header, principal
+    attribution when actor_id omitted, 404 for missing OKR, 422 for
+    unknown event_type
+  - `POST /v1/teams/{id}/learnings`: 201 with canonical response, 404
+    for missing team, 422 for malformed quarter
+  - `POST /v1/key-results/{id}/checkins`: status derived from
+    confidence, explicit new_status overrides confidence default, 404
+    for missing KR
+  - `POST /v1/teams/{id}/okrs`: full creation with KRs, 404 for missing
+    team, 404 for missing parent OKR, 422 for KR weight out of range
+  - Cross-cutting: missing bearer token rejected (covered once on
+    decisions; all POST endpoints share the same dependency)
+- Test count badge updated 349 → 415; quick-start "10 seconds" → "12 seconds".
+
+### Design choices documented
+- Body-override pattern for actor_id/author_id (priority: body > principal).
+  Enables service accounts to record events on behalf of real users.
+- 404 for missing parent resources rather than passing through SQLAlchemy
+  IntegrityError. Foreign-key violations are unactionable for an HTTP
+  client; explicit 404s with the missing id named are immediately
+  fixable. Every POST handler verifies parents before committing.
+- Read/mutate split as usage-pattern boundary, not layer boundary. Both
+  REST POSTs and MCP tools call the same domain repositories. The split
+  is "REST when the caller knows the answer, MCP when the agent does."
+
 ## [0.13.0] - 2026-05-06
 
 ### Added
@@ -569,7 +656,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/Akash-1512/cascade/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Akash-1512/cascade/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Akash-1512/cascade/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Akash-1512/cascade/compare/v0.10.0...v0.11.0

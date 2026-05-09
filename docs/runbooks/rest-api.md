@@ -1,11 +1,15 @@
 # REST API
 
-cascade exposes a read-side REST API as the second integration surface
-alongside the MCP server. Mutations flow through MCP because that's where the
-agent loop lives; the REST API is for read access — list views, OKR details,
-causal trails, and organizational learnings.
+cascade exposes a REST API alongside the MCP server. Read endpoints for
+OKRs, decisions, and organizational learnings; mutation endpoints for
+committing aligned drafts, logging decisions and check-ins, and recording
+learnings. Mid-life agent-driven mutations (target changes, draft
+pause-and-resume, risk interventions) still flow through MCP because they
+involve the agent loop — what's exposed over REST is pure persistence.
 
 ## Routes
+
+### Read
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -16,6 +20,20 @@ causal trails, and organizational learnings.
 | `GET` | `/v1/okrs/{id}/score` | Score breakdown |
 | `GET` | `/v1/okrs/{id}/decisions?limit={n}` | Causal trail |
 | `GET` | `/v1/teams/{team_id}/learnings?quarter={q}&category={c}` | Org learnings |
+
+### Mutations (added in v0.14.0)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/v1/teams/{team_id}/okrs` | Commit an Objective from an aligned draft |
+| `POST` | `/v1/okrs/{id}/decisions` | Log a Decision against an Objective |
+| `POST` | `/v1/key-results/{id}/checkins` | Log a CheckIn against a Key Result |
+| `POST` | `/v1/teams/{team_id}/learnings` | Record an organizational learning |
+
+All POST endpoints return 201 with the canonical resource body and a
+`Location` header pointing at the GET path. 404 for missing parent
+resources (team, OKR, KR, parent OKR). 422 for malformed UUIDs or
+constraint violations.
 
 Full schema at `/openapi.json` and `/docs`.
 
@@ -136,6 +154,107 @@ curl 'http://localhost:8000/v1/teams/2f3e1c4a-.../learnings?category=estimation'
 Returns the team's running list of estimation-related learnings across
 quarters. Filter by `quarter` to see what was distilled in a specific
 retrospective.
+
+### Commit an Objective from an aligned draft
+
+```bash
+curl -X POST http://localhost:8000/v1/teams/2f3e1c4a-.../okrs \
+  -H "Authorization: Bearer $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Reach product-market fit in the SMB segment",
+    "description": "Convert Q1 enterprise pilot insights into an SMB push",
+    "quarter": "2026Q2",
+    "owner_id": "11111111-1111-1111-1111-111111111111",
+    "key_results": [
+      {
+        "description": "Lift weekly active accounts from 200 to 800",
+        "metric_type": "number",
+        "baseline_value": 200,
+        "target_value": 800,
+        "current_value": 200,
+        "unit": "accounts",
+        "weight": 0.5
+      },
+      {
+        "description": "Move trial-to-paid conversion from 6% to 14%",
+        "metric_type": "percentage",
+        "baseline_value": 6,
+        "target_value": 14,
+        "current_value": 6,
+        "weight": 0.5
+      }
+    ]
+  }'
+```
+
+Returns 201 with the canonical Objective shape (including the assigned
+`id`) and a `Location: /v1/okrs/{id}` header. Typical flow: a HITL draft
+on the MCP side completes, the agent returns an aligned proposal, then a
+script POSTs that proposal here to commit it.
+
+### Log a Decision
+
+```bash
+curl -X POST http://localhost:8000/v1/okrs/9b7d8a2e-.../decisions \
+  -H "Authorization: Bearer 11111111-1111-1111-1111-111111111111" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "kr_target_change",
+    "summary": "Lowered trial-to-paid target from 18% to 14% after pricing audit",
+    "chosen": "14% conversion target",
+    "tradeoff": "Less ambitious headline number, but no longer requires a price change we have not approved",
+    "alternatives": [
+      {
+        "option": "Keep the 18% target",
+        "reason_rejected": "Finance pushed back: 18% requires either a price cut or a free-trial extension we cannot fund this quarter"
+      }
+    ],
+    "evidence": [
+      {"source": "Pricing model v3", "claim": "18% conversion at current price implies negative gross margin"}
+    ]
+  }'
+```
+
+`actor_id` defaults to the principal's user_id. Override it in the body
+when a service account logs a decision on behalf of a real user.
+
+### Log a CheckIn
+
+```bash
+curl -X POST http://localhost:8000/v1/key-results/4f8d2a1c-.../checkins \
+  -H "Authorization: Bearer 11111111-1111-1111-1111-111111111111" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "progress_value": 480,
+    "confidence": "medium",
+    "narrative": "Halfway to target but conversion lagging — see decision attached for the lowered target"
+  }'
+```
+
+Without `new_status`, the persisted status is derived from `confidence`
+(high → on_track, medium → at_risk, low → off_track). Pass `new_status`
+explicitly to override (useful when numbers look fine but you're reading a
+structural risk that confidence alone doesn't capture).
+
+### Record an organizational learning
+
+```bash
+curl -X POST http://localhost:8000/v1/teams/2f3e1c4a-.../learnings \
+  -H "Authorization: Bearer $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quarter": "2026Q1",
+    "title": "Underestimated CSM adoption friction on data products",
+    "description": "Three Q1 OKRs shipped technically-correct work that the CSM team did not end up using. Pattern indicates a missing operator-adoption KR on data product OKRs going forward.",
+    "category": "alignment",
+    "occurrences": 3
+  }'
+```
+
+Pass `supersedes_id` to link the new learning to the previous version it
+replaces — the audit trail keeps the predecessor; nothing is destructively
+overwritten.
 
 ## Pagination
 
