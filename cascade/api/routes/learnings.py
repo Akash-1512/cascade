@@ -5,15 +5,24 @@ from __future__ import annotations
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from cascade.api.auth import Principal, require_principal
 from cascade.api.dependencies import SessionDep
-from cascade.api.schemas import LearningListResponse, LearningResponse
-from cascade.domain.organizational_learning import OrganizationalLearning
+from cascade.api.schemas import (
+    LearningCreateRequest,
+    LearningListResponse,
+    LearningResponse,
+)
+from cascade.domain.organizational_learning import (
+    OrganizationalLearning,
+    OrganizationalLearningCreate,
+)
+from cascade.storage.repositories import NotFoundError
 from cascade.storage.repositories.organizational_learning import (
     OrganizationalLearningRepository,
 )
+from cascade.storage.repositories.team import TeamRepository
 
 router = APIRouter(prefix="/v1", tags=["learnings"])
 
@@ -47,6 +56,66 @@ async def list_team_learnings(
     learnings = await repo.list_for_team(team_id, quarter=quarter, category=category, limit=limit)
     items = [_to_response(learning) for learning in learnings]
     return LearningListResponse(items=items, count=len(items))
+
+
+@router.post(
+    "/teams/{team_id}/learnings",
+    response_model=LearningResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record an organizational learning for a team",
+)
+async def create_team_learning(
+    team_id: UUID,
+    body: LearningCreateRequest,
+    response: Response,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> LearningResponse:
+    """Persist a new organizational learning theme for ``team_id``.
+
+    Returns 201 with the canonical :class:`LearningResponse`. The
+    ``Location`` header points at the team's learnings list (no per-learning
+    GET endpoint exists yet — paginate the list to find the new id).
+
+    A 404 is returned if the team doesn't exist. Validation errors map to
+    422 via FastAPI's default handling.
+    """
+    # Verify the team exists before committing — turns the foreign-key
+    # violation into a 404 with an actionable message.
+    team_repo = TeamRepository(session)
+    try:
+        await team_repo.get(team_id)
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Team {team_id} not found",
+        ) from exc
+
+    repo = OrganizationalLearningRepository(session)
+    supersedes_uuid: UUID | None = None
+    if body.supersedes_id is not None:
+        try:
+            supersedes_uuid = UUID(body.supersedes_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"supersedes_id is not a valid UUID: {body.supersedes_id!r}",
+            ) from exc
+
+    learning = await repo.create(
+        OrganizationalLearningCreate(
+            team_id=team_id,
+            quarter=body.quarter,
+            title=body.title,
+            description=body.description,
+            category=body.category,
+            occurrences=body.occurrences,
+            affected_okr_ids=body.affected_okr_ids,
+            supersedes_id=supersedes_uuid,
+        )
+    )
+    response.headers["Location"] = f"/v1/teams/{team_id}/learnings"
+    return _to_response(learning)
 
 
 def _to_response(learning: OrganizationalLearning) -> LearningResponse:
