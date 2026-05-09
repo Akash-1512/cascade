@@ -1,9 +1,14 @@
 # cascade.api
 
-Read-side REST API. Mutations flow through :mod:`cascade.mcp` because that's
-where the agent loop lives.
+REST API. Read endpoints for OKRs, decisions, and organizational learnings;
+mutation endpoints for committing aligned drafts, logging decisions and
+check-ins, and recording learnings. Mid-life agent-driven mutations (target
+changes, draft pause-and-resume) still flow through MCP because they
+involve the agent loop — what's exposed here is pure persistence.
 
 ## Routes
+
+### Read
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -15,9 +20,41 @@ where the agent loop lives.
 | `GET` | `/v1/okrs/{id}/decisions` | Causal trail for an OKR |
 | `GET` | `/v1/teams/{team_id}/learnings` | Organizational learning themes |
 
+### Mutations (added in v0.14.0)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/v1/teams/{team_id}/okrs` | Create an Objective from an aligned draft |
+| `POST` | `/v1/okrs/{id}/decisions` | Log a Decision against an Objective |
+| `POST` | `/v1/key-results/{id}/checkins` | Log a CheckIn against a Key Result |
+| `POST` | `/v1/teams/{team_id}/learnings` | Record an organizational learning |
+
+All POST endpoints return 201 on success with the canonical resource shape
+in the body and a `Location` header pointing at the GET path. 404 for
+missing parent resources (team, OKR, KR, parent OKR). 422 for malformed
+UUIDs or constraint violations (KR weight out of range, quarter format).
+
 OpenAPI docs at `/docs`. The schema lives at `/openapi.json` and is the
 authoritative interface contract — generated clients should regenerate when
 this changes.
+
+## Why the read/mutate split
+
+Read endpoints are unconditional — any authenticated principal can hit
+them. Mutation endpoints fall into two buckets:
+
+- **Pure persistence** (POST endpoints in this module). The client already
+  knows what it wants to write — an aligned draft from a HITL flow, a
+  decision recorded after a meeting, a check-in result from a sprint demo.
+  REST is the right shape: idempotent in spirit, scriptable from CI,
+  loggable through standard HTTP infrastructure.
+- **Agent-driven mutations** (target changes, draft pause-and-resume,
+  risk interventions). The client needs the agent loop to evaluate state
+  before persisting. These flow through MCP where the loop lives.
+
+The split is **not** a layer boundary — both REST POSTs and MCP tools
+ultimately call the same domain repositories. It's a usage-pattern
+boundary: REST when the caller knows the answer, MCP when the agent does.
 
 ## Files
 
