@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from cascade._version import __version__
-from cascade.api.routes import decisions, learnings, okrs
+from cascade.api.routes import checkins, decisions, learnings, okrs
 from cascade.api.schemas import HealthResponse
 from cascade.config import get_settings
 from cascade.storage.session import get_sessionmaker
@@ -38,9 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="cascade",
     description=(
-        "OKR governance platform with multi-agent AI coaching. "
-        "Read-side projection over the agent state and causal memory; "
-        "mutations flow through the MCP server where the agent loop lives."
+        "OKR governance platform with multi-agent AI coaching. Read endpoints "
+        "for OKRs, decisions, and organizational learnings; mutation endpoints "
+        "for committing aligned drafts, logging decisions and check-ins, and "
+        "recording learnings. Mid-life agent-driven mutations (target changes, "
+        "draft pause-and-resume) flow through the MCP server where the agent "
+        "loop lives."
     ),
     version=__version__,
     lifespan=lifespan,
@@ -61,6 +64,7 @@ app.add_middleware(
 app.include_router(okrs.router)
 app.include_router(decisions.router)
 app.include_router(learnings.router)
+app.include_router(checkins.router)
 
 
 @app.get(
