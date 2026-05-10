@@ -29,9 +29,14 @@ if TYPE_CHECKING:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan — initialise shared resources, tear them down on exit."""
+    import logging
+
+    from cascade.observability import observability_state
+
     settings = get_settings()
     app.state.settings = settings
     app.state.sessionmaker = get_sessionmaker()
+    logging.getLogger(__name__).info(observability_state().summary_line())
     yield
 
 
