@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-05-06
+
+### Added
+- **`ARCHITECTURE.md`** at the repo root — a synthesis-level walkthrough
+  of the system organised for progressive disclosure (30-second scan →
+  2-minute read → 10-minute deep read). Six mermaid diagrams that render
+  natively on GitHub:
+  - **System overview** — three integration surfaces, one orchestrator,
+    one storage substrate, optional observability tier
+  - **Agent topology** — six agents plus supervisor, decision routing
+    table, conditional-edge semantics
+  - **HITL drafting** — sequenceDiagram showing
+    `start_okr_draft → pause → resume_okr_draft` round-trip with the
+    checkpointer interaction made explicit
+  - **Data model** — erDiagram for the seven primary aggregates with
+    cardinality and key fields
+  - **Eval gate flow** — three input datasets → three evaluators → JSON
+    report → MLflow run with threshold gate
+  - **Deployment shape** — three app processes, three datastores,
+    external dependencies (LLM provider, identity provider)
+- "Three surfaces" comparison table making the MCP / REST / Console
+  distinction concrete (when to reach for each, what each reads vs writes).
+- Supervisor decision-table in the Agents section codifying the
+  "awaiting_human as terminal signal" contract that's load-bearing for
+  the HITL flow's correctness.
+- Resumption decision table (commit / revise / abandon → state diff)
+  documenting the v0.13.0 contract in one place.
+
+### Changed
+- Top-level README's "What lives where" pointer updated to lead with
+  `ARCHITECTURE.md`. The existing
+  [`docs/architecture/`](docs/architecture/) per-component docs and
+  [`docs/adr/`](docs/adr/) entries remain referenced for depth.
+
+### Why a single root-level file rather than splitting
+A senior reviewer scrolling the repo wants one obvious entry point, not
+a directory tree. `ARCHITECTURE.md` at the root is the convention. The
+per-component docs in `docs/architecture/` remain canonical for depth;
+the top-level synthesis links into them.
+
+### Why mermaid rather than ASCII
+GitHub renders mermaid blocks natively. ASCII art is great in terminal
+viewers but loses information in browsers (alignment drifts at different
+font widths, no zoom, no copy-paste of node names). The existing
+[`docs/architecture/overview.md`](docs/architecture/overview.md) keeps
+the ASCII version for terminal readers — the formats serve different
+audiences.
+
+### Tests
+- 442 total, all green. No test surface change in this release — pure
+  documentation.
+
 ## [0.15.0] - 2026-05-06
 
 ### Added
@@ -747,7 +799,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Akash-1512/cascade/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Akash-1512/cascade/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Akash-1512/cascade/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Akash-1512/cascade/compare/v0.12.0...v0.13.0

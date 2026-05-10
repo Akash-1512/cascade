@@ -93,8 +93,10 @@ Three concrete capabilities that off-the-shelf OKR tools don't ship:
 ```
 
 Six agents, three storage tiers, one orchestrator. See
-[`docs/architecture/overview.md`](docs/architecture/overview.md) for the long
-version and [`docs/adr/`](docs/adr/) for the design decisions.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the system walkthrough with mermaid
+diagrams (HITL flow, agent topology, data model, eval gate),
+[`docs/architecture/`](docs/architecture/) for component-level depth, and
+[`docs/adr/`](docs/adr/) for individual design decisions.
 
 ## Quick start
 
