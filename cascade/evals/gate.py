@@ -95,42 +95,75 @@ async def run_evals(
     metric_filter: list[str] | None,
     case_ids: list[str] | None,
 ) -> EvalReport:
-    """Run the eval suite and return the structured report."""
+    """Run the eval suite and return the structured report.
+
+    When ``MLFLOW_TRACKING_URI`` is configured the run is wrapped in an
+    MLflow run context: metrics, params, and a summary tag are logged.
+    Without MLflow configured the wrapper is a no-op and behaviour is
+    unchanged.
+    """
+    from cascade.observability import log_metrics, log_params, mlflow_run
+
     thresholds = load_thresholds()
     started_at = datetime.now(tz=UTC)
     metrics: dict[str, MetricResult] = {}
 
-    if metric_filter is None or "drafting" in metric_filter:
-        cases = load_golden_okrs()
-        if case_ids:
-            cases = [c for c in cases if c.id in case_ids]
-        if cases:
-            metrics["drafting_f1"] = await evaluate_drafting(
-                cases=cases,
-                model=model,
-                threshold=thresholds.drafting["f1_min"],
-            )
+    run_name = f"eval-gate-{started_at.strftime('%Y%m%dT%H%M%SZ')}"
+    tags = {
+        "cascade.version": __version__,
+        "cascade.surface": "eval-gate",
+    }
 
-    if metric_filter is None or "retrieval" in metric_filter:
-        cases = load_memory_questions()
-        if case_ids:
-            cases = [c for c in cases if c.id in case_ids]
-        if cases:
-            metrics["retrieval_f1"] = await evaluate_retrieval(
-                cases=cases,
-                threshold=thresholds.retrieval["faithfulness_min"],
-            )
+    with mlflow_run(run_name, tags=tags):
+        log_params(
+            {
+                "metric_filter": metric_filter or "all",
+                "case_filter": case_ids or "all",
+                "groq_model": getattr(model, "model_name", "unknown"),
+                "drafting_threshold_f1": thresholds.drafting["f1_min"],
+                "retrieval_threshold_faithfulness": thresholds.retrieval["faithfulness_min"],
+                "red_team_threshold_pass_rate": thresholds.red_team["pass_rate_min"],
+            }
+        )
 
-    if metric_filter is None or "red_team" in metric_filter:
-        cases = load_red_team()
-        if case_ids:
-            cases = [c for c in cases if c.id in case_ids]
-        if cases:
-            metrics["red_team_pass_rate"] = await evaluate_red_team(
-                cases=cases,
-                model=model,
-                threshold=thresholds.red_team["pass_rate_min"],
-            )
+        if metric_filter is None or "drafting" in metric_filter:
+            cases = load_golden_okrs()
+            if case_ids:
+                cases = [c for c in cases if c.id in case_ids]
+            if cases:
+                metrics["drafting_f1"] = await evaluate_drafting(
+                    cases=cases,
+                    model=model,
+                    threshold=thresholds.drafting["f1_min"],
+                )
+
+        if metric_filter is None or "retrieval" in metric_filter:
+            cases = load_memory_questions()
+            if case_ids:
+                cases = [c for c in cases if c.id in case_ids]
+            if cases:
+                metrics["retrieval_f1"] = await evaluate_retrieval(
+                    cases=cases,
+                    threshold=thresholds.retrieval["faithfulness_min"],
+                )
+
+        if metric_filter is None or "red_team" in metric_filter:
+            cases = load_red_team()
+            if case_ids:
+                cases = [c for c in cases if c.id in case_ids]
+            if cases:
+                metrics["red_team_pass_rate"] = await evaluate_red_team(
+                    cases=cases,
+                    model=model,
+                    threshold=thresholds.red_team["pass_rate_min"],
+                )
+
+        # Flat numeric metrics for MLflow's metric API. Each MetricResult
+        # has a `score` field; the eval gate's UI groups by metric name.
+        log_metrics({name: result.score for name, result in metrics.items()})
+        log_metrics(
+            {f"{name}_passed": 1.0 if result.passed else 0.0 for name, result in metrics.items()}
+        )
 
     finished_at = datetime.now(tz=UTC)
     return EvalReport(
@@ -197,6 +230,10 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stderr,
     )
+
+    from cascade.observability import observability_state
+
+    logger.info(observability_state().summary_line())
 
     if args.use_fakes:
         model: BaseChatModel = _build_fake_model()
