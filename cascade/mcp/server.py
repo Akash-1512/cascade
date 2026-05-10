@@ -165,6 +165,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.exception("failed to build MCP server")
         return 1
 
+    from cascade.observability import observability_state
+
+    logger.info(observability_state().summary_line())
     logger.info("cascade MCP server starting on transport=%s", args.transport)
     exit_code = 0
     try:

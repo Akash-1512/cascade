@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-05-06
+
+### Added
+- **`cascade.observability` module** — three opt-in integrations sharing
+  one fail-quiet contract: LangSmith for trace exploration (activates via
+  env-var detection inside LangChain itself), Langfuse for traces plus
+  cost tracking (explicit callback handler), MLflow for eval-run experiment
+  tracking (context manager + metric/param logging).
+- `cascade.observability.handlers.build_callback_handlers()` returns the
+  list of LangChain callbacks to attach to a chat model. Empty when nothing
+  is configured; never includes a LangSmith handler explicitly because
+  that would double-trace (LangSmith activates via `LANGSMITH_TRACING`
+  + `LANGSMITH_API_KEY`).
+- `cascade.observability.handlers.observability_state()` returns an
+  `ObservabilityState` snapshot (langsmith_active / langfuse_active /
+  mlflow_active flags + project + URI). `summary_line()` renders a
+  startup-log-friendly status string.
+- `cascade.observability.mlflow_runner.mlflow_run(name, tags=...)`
+  context manager that wraps an MLflow run when configured, yields
+  `None` when not. `log_metrics()` and `log_params()` are no-ops outside
+  a run.
+- `[observability]` extra in `pyproject.toml` pulls in `langfuse>=3.0.0`
+  and `mlflow>=2.16.0`. Installation: `pip install 'cascade[observability]'`.
+- `docs/runbooks/observability.md` — full setup guide for all three
+  integrations, expected trace shapes, what gets logged per eval-gate
+  run, troubleshooting for the four most common production issues.
+- `cascade/observability/README.md` — per-module README with the surface,
+  test layout, and "why fail-quiet" rationale.
+
+### Changed
+- `cascade.agents.llm.get_chat_model()` now attaches the callback list
+  from `build_callback_handlers()` to both the primary `ChatGroq` model
+  and the optional `ChatOpenAI` fallback. With nothing configured the
+  list is empty and behaviour is unchanged.
+- `cascade.evals.gate.run_evals()` wraps its body in
+  `mlflow_run("eval-gate-{ISO8601-Z}", tags=...)`. Logs flat metrics
+  (`drafting_f1`, `retrieval_f1`, `red_team_pass_rate`, plus
+  `<name>_passed` 1.0/0.0 indicators) and params (filters, model name,
+  configured thresholds). Wrapper is transparent when MLflow isn't
+  configured.
+- `cascade.config.Settings.mlflow_tracking_uri` default changed from
+  `"http://localhost:5000"` to `None`. The previous default suggested
+  MLflow was set up when it wasn't; making the default explicit means
+  tests and CI run cleanly without an MLflow server.
+- MCP server, REST API lifespan, and eval gate `main()` all log the
+  `observability_state().summary_line()` at INFO on startup. Operators
+  see "observability: LangSmith→cascade, MLflow→http://..." or
+  "observability: none configured" in the first few log lines.
+
+### Tests
+- 442 total: 347 unit + 94 integration (all green); 1 e2e skipped without keys
+- 14 new unit tests in `tests/unit/test_observability_handlers.py`:
+  - state inspection (all-inactive when nothing configured, summary line,
+    LangSmith requires both flag and key, LangSmith env-var key works,
+    Langfuse requires both keys, MLflow active on URI, summary line lists
+    active integrations)
+  - build_callback_handlers (empty when nothing configured, no
+    LangSmith handler explicit, Langfuse skipped on package missing,
+    Langfuse handler included when package present, Langfuse skipped on
+    construction failure)
+- 11 new unit tests in `tests/unit/test_observability_mlflow.py`:
+  - context manager (yields None when URI unset, yields None when package
+    missing, starts and closes run when configured, yields None on
+    set_tracking_uri failure, yields None on start_run failure)
+  - log_metrics (no-op without active run, writes to active run, filters
+    NaN/inf, swallows MLflow errors)
+  - log_params (coerces to string, no-op without active run)
+- 2 new integration tests in
+  `tests/integration/test_observability_eval_gate.py` verifying the eval
+  gate logs the right metric/param shapes when MLflow is configured and
+  runs unchanged when it isn't.
+- Test count badge updated 415 → 442.
+
+### Design choices documented
+- Fail-quiet contract across all three integrations. A trace is a
+  debugging artifact, not a load-bearing component. Construction
+  failures, missing optional packages, and mid-run rejections all
+  degrade to no-op with a WARNING/ERROR log. Observability outages
+  must never propagate to the user.
+- LangSmith via env-var activation inside LangChain (no explicit
+  handler). Langfuse via explicit callback in the list. Including a
+  LangSmith handler explicitly would double-trace every call —
+  `test_build_does_not_include_langsmith_handler_explicitly` codifies
+  this.
+- Both Langfuse keys required for active state. Public-only or
+  secret-only is always misconfiguration; reporting active in that
+  state would surprise operators with 401s on the first model call.
+- Lazy imports throughout. The `langfuse` and `mlflow` packages are
+  optional extras; the test suite injects fakes via `sys.modules` to
+  exercise the real branching logic without needing them installed.
+
 ## [0.14.0] - 2026-05-06
 
 ### Added
@@ -656,7 +747,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Akash-1512/cascade/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Akash-1512/cascade/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Akash-1512/cascade/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Akash-1512/cascade/compare/v0.11.0...v0.12.0
