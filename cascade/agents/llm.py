@@ -23,10 +23,17 @@ from cascade.config import Settings, get_settings
 
 
 def get_chat_model(settings: Settings | None = None) -> BaseChatModel:
-    """Return a chat model configured from settings, with retry and fallback.
+    """Return a chat model configured from settings, with retry, fallback, and tracing.
 
     The returned object is a LangChain :class:`Runnable` — it composes cleanly with
-    ``with_structured_output``, ``with_retry``, and tracing.
+    ``with_structured_output`` and downstream callbacks propagate to nested calls.
+
+    Observability callbacks are attached at construction time. LangSmith
+    activates via env vars (``LANGSMITH_API_KEY`` + ``LANGSMITH_TRACING``)
+    and is picked up by langchain itself; Langfuse needs an explicit
+    handler in the ``callbacks`` list and is added by
+    :func:`cascade.observability.build_callback_handlers`. When neither is
+    configured the callback list is empty and the model behaves as before.
     """
     cfg = settings or get_settings()
 
@@ -39,11 +46,16 @@ def get_chat_model(settings: Settings | None = None) -> BaseChatModel:
     # Imported lazily so tests that patch the LLM don't pay the import cost.
     from langchain_groq import ChatGroq
 
+    from cascade.observability import build_callback_handlers
+
+    callbacks = build_callback_handlers()
+
     primary = ChatGroq(
         api_key=cfg.groq_api_key,
         model=cfg.groq_model,
         temperature=0.2,
         max_retries=0,  # we drive retry ourselves so we can fall back cleanly
+        callbacks=callbacks if callbacks else None,
     )
 
     primary_with_retry = primary.with_retry(
@@ -63,6 +75,7 @@ def get_chat_model(settings: Settings | None = None) -> BaseChatModel:
         base_url="https://api.together.xyz/v1",
         model=cfg.together_model,
         temperature=0.2,
+        callbacks=callbacks if callbacks else None,
     )
 
     return primary_with_retry.with_fallbacks([fallback])  # type: ignore[return-value]
