@@ -54,7 +54,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
 
-    mlflow_tracking_uri: str = "http://localhost:5000"
+    # When None, MLflow logging is a no-op (no tracking URI to write to).
+    # Set to a real tracking server URL to enable eval-run telemetry.
+    mlflow_tracking_uri: str | None = None
     mlflow_experiment: str = "cascade-evals"
 
     # --- MCP server -------------------------------------------------------
