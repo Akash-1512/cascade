@@ -57,9 +57,16 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install pip-audit
-        run: pip install pip-audit
+      - name: Install package and pip-audit
+        # Install the package first so pip-audit can resolve the full
+        # transitive tree, then audit. --strict reports anything with a
+        # known CVE; we don't fail the build because false-positives on
+        # rapidly-moving ML libraries are common — surface and triage,
+        # don't block.
+        run: |
+          pip install -e ".[dev,ui,observability]"
+          pip install pip-audit
 
-      - name: Audit dependencies
-        run: pip-audit --strict --skip-editable -r <(pip install -e . --dry-run | grep -E '^[a-zA-Z]' | sort -u | head -200) || pip-audit --strict
+      - name: Audit installed packages
+        run: pip-audit --strict
         continue-on-error: true

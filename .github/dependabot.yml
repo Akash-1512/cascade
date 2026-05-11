@@ -1,0 +1,68 @@
+# Dependabot configuration for cascade.
+#
+# Two ecosystems tracked: Python deps from pyproject.toml and GitHub Actions
+# pins in .github/workflows/. Weekly schedule because daily PRs add noise
+# without proportional safety — security-critical updates still surface
+# through pip-audit (security.yml) on the same cadence.
+#
+# version: 2 is the current Dependabot config schema; see
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Python dependencies declared in pyproject.toml.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    # Group framework updates so we don't get five PRs for one LangChain
+    # release. ML libraries move together; review them together.
+    groups:
+      langchain:
+        patterns:
+          - "langchain*"
+          - "langgraph*"
+      pydantic:
+        patterns:
+          - "pydantic*"
+      fastapi-stack:
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "uvicorn*"
+          - "httpx"
+      observability:
+        patterns:
+          - "langfuse*"
+          - "mlflow*"
+      test-tools:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "mypy"
+
+  # GitHub Actions versions pinned in workflow files.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
