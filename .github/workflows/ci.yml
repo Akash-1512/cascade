@@ -131,6 +131,45 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest -m integration --cov=cascade --cov-append --cov-report=xml
 
+  helm-lint:
+    name: Helm chart lint
+    runs-on: ubuntu-latest
+    # Runs helm lint + helm template against helm/cascade/. The structural
+    # python validator (tests/unit/test_helm_chart.py) catches the most
+    # common drift inside the standard pytest run; this job is the
+    # authoritative check against real Helm.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Update chart dependencies
+        # Pulls the bitnami/postgresql subchart referenced in Chart.yaml.
+        # Required before lint/template because the chart declares a
+        # dependency on a remote repo.
+        run: |
+          helm dependency update helm/cascade/
+
+      - name: Helm lint
+        run: helm lint helm/cascade/
+
+      - name: Helm template (dev values)
+        # Render the chart against the dev values to catch template
+        # errors that lint alone misses (mostly: helpers that take args
+        # and fail on certain value combinations). The rendered output
+        # is piped through kubectl --dry-run=client where it's
+        # available; on a clean runner we just verify the rendering
+        # succeeds and emits non-empty YAML.
+        run: |
+          helm template cascade-test helm/cascade/ \
+            --values helm/cascade/values-dev.yaml \
+            --set secrets.groqApiKey=fake-key-for-lint > /tmp/rendered.yaml
+          test -s /tmp/rendered.yaml || (echo "Empty render output"; exit 1)
+          echo "Rendered $(wc -l < /tmp/rendered.yaml) lines of YAML"
+
   build:
     name: Build distribution
     runs-on: ubuntu-latest

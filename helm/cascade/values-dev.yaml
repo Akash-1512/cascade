@@ -1,0 +1,75 @@
+# Development values for cascade.
+#
+# Use this for local clusters (kind, minikube, k3d) or a dev namespace in
+# a shared cluster. Three differences from the defaults in values.yaml:
+#
+#   1. authMode=dev (no JWT verification — any UUID bearer token works)
+#   2. Persistence sizes reduced (1Gi Postgres, 256Mi checkpointer)
+#   3. CORS wide open (any origin)
+#
+# Install:
+#
+#   helm dependency update helm/cascade/
+#   helm install cascade-dev helm/cascade/ \
+#     --namespace cascade --create-namespace \
+#     --values helm/cascade/values-dev.yaml \
+#     --set secrets.groqApiKey="$GROQ_API_KEY"
+
+image:
+  tag: "0.18.0"
+
+api:
+  replicaCount: 1   # one is enough for dev
+  authMode: dev
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+mcp:
+  replicaCount: 1
+  checkpointer:
+    persistence:
+      enabled: true
+      size: 256Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ui:
+  replicaCount: 1
+
+config:
+  logLevel: DEBUG
+  corsAllowOrigins:
+    - "*"
+  observability:
+    langsmith:
+      tracing: false
+    mlflow:
+      trackingUri: ""
+
+postgresql:
+  enabled: true
+  auth:
+    username: cascade
+    password: cascade-dev-password   # dev only — never in production values
+    database: cascade
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

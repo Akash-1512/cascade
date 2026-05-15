@@ -1,0 +1,116 @@
+{{- if .Values.mcp.enabled -}}
+{{- $dbSecret := splitList "," (include "cascade.databasePasswordSecret" .) -}}
+{{- if .Values.mcp.checkpointer.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cascade.componentName" (dict "context" . "component" "mcp") }}-checkpointer
+  labels:
+    {{- include "cascade.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mcp.checkpointer.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.mcp.checkpointer.persistence.size }}
+  {{- with .Values.mcp.checkpointer.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cascade.componentName" (dict "context" . "component" "mcp") }}
+  labels:
+    {{- include "cascade.labels" . | nindent 4 }}
+    {{- include "cascade.selectorLabels" (dict "context" . "component" "mcp") | nindent 4 }}
+spec:
+  # MCP server holds the LangGraph checkpointer state — scaling this
+  # horizontally requires a shared-state checkpointer backend (e.g.
+  # Postgres). Until then, replicaCount stays at 1.
+  replicas: {{ .Values.mcp.replicaCount }}
+  strategy:
+    type: Recreate    # PVC is ReadWriteOnce; rolling update would deadlock
+  selector:
+    matchLabels:
+      {{- include "cascade.selectorLabels" (dict "context" . "component" "mcp") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cascade.selectorLabels" (dict "context" . "component" "mcp") | nindent 8 }}
+      {{- with .Values.mcp.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "cascade.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mcp
+          image: {{ include "cascade.image" (dict "context" . "component" .Values.mcp) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "cascade.mcp.server", "--transport", {{ .Values.mcp.transport | quote }}]
+          ports:
+            - name: mcp
+              containerPort: {{ .Values.mcp.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "cascade.fullname" . }}-config
+            - secretRef:
+                name: {{ include "cascade.secretName" . }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ index $dbSecret 0 }}
+                  key: {{ index $dbSecret 1 }}
+            - name: DATABASE_URL
+              value: {{ include "cascade.databaseUrl" . | quote }}
+          {{- if .Values.mcp.checkpointer.persistence.enabled }}
+          volumeMounts:
+            - name: checkpointer
+              mountPath: /var/lib/cascade
+          {{- end }}
+          resources:
+            {{- toYaml .Values.mcp.resources | nindent 12 }}
+      {{- if .Values.mcp.checkpointer.persistence.enabled }}
+      volumes:
+        - name: checkpointer
+          persistentVolumeClaim:
+            claimName: {{ include "cascade.componentName" (dict "context" . "component" "mcp") }}-checkpointer
+      {{- end }}
+      {{- with .Values.mcp.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cascade.componentName" (dict "context" . "component" "mcp") }}
+  labels:
+    {{- include "cascade.labels" . | nindent 4 }}
+    {{- include "cascade.selectorLabels" (dict "context" . "component" "mcp") | nindent 4 }}
+spec:
+  type: {{ .Values.mcp.service.type }}
+  ports:
+    - name: mcp
+      port: {{ .Values.mcp.service.port }}
+      targetPort: mcp
+      protocol: TCP
+  selector:
+    {{- include "cascade.selectorLabels" (dict "context" . "component" "mcp") | nindent 4 }}
+{{- end }}

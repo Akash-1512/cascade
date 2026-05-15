@@ -135,6 +135,23 @@ After `make demo`, paste the printed team UUID into the operator console
 sidebar (and any UUID as the bearer token in dev mode) to see populated
 OKRs, KRs, decision trails, and organizational learnings.
 
+## Production deployment
+
+The repo ships a Helm chart at [`helm/cascade/`](helm/cascade/) — three
+Deployments (API, MCP, UI) behind ClusterIP Services with an optional
+Postgres subchart for baseline installs. Production deployments point
+at managed Postgres and use external Secret management. The chart's
+README walks through both modes. CI runs `helm lint` + `helm template`
+on every PR so the chart stays correct.
+
+```bash
+helm dependency update helm/cascade/
+helm install cascade helm/cascade/ \
+  --namespace cascade --create-namespace \
+  --values helm/cascade/values-dev.yaml \
+  --set secrets.groqApiKey="$GROQ_API_KEY"
+```
+
 ## Use it from Claude Desktop
 
 Add to `claude_desktop_config.json`:

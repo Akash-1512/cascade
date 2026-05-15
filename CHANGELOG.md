@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-05-06
+
+### Added
+- **Helm chart at `helm/cascade/`** — production deployment shape for
+  cascade on Kubernetes. Three Deployments (API, MCP, UI) behind
+  ClusterIP Services with shared ConfigMap and Secret. Postgres ships
+  as an optional bitnami subchart dependency for baseline installs;
+  production deployments point at managed Postgres via
+  `externalDatabase.*` config.
+- `helm/cascade/Chart.yaml` — chart `0.1.0` against app version
+  `0.18.0`. Chart version and app version track separately so chart-only
+  fixes don't force an app release.
+- `helm/cascade/values.yaml` — fully-documented configuration surface
+  covering image, three service sections (api / mcp / ui), shared
+  secrets, non-secret config, Postgres subchart options, and external
+  database fallback. Every key has an inline comment explaining what
+  it controls and when to change it.
+- `helm/cascade/templates/_helpers.tpl` — shared template helpers:
+  `cascade.fullname`, `cascade.componentName`, `cascade.labels`,
+  `cascade.selectorLabels`, `cascade.serviceAccountName`,
+  `cascade.secretName`, `cascade.image`, `cascade.databaseUrl`,
+  `cascade.databasePasswordSecret`. Helpers take a context argument so
+  the per-component templates can share label and selector logic.
+- API, MCP, and UI deployment templates with sensible default
+  resources, liveness/readiness probes, and service accounts.
+- MCP server gets a PersistentVolumeClaim for the LangGraph
+  checkpointer (mounted at `/var/lib/cascade`, SQLite file at
+  `/var/lib/cascade/checkpoint.db`) so paused HITL drafts survive pod
+  restarts. ReadWriteOnce + `strategy: Recreate` means
+  `mcp.replicaCount` stays at 1; horizontal scaling needs a
+  shared-state checkpointer backend (tracked as future enhancement).
+- ConfigMap with non-secret env vars (CORS, log level, MCP host/port,
+  observability settings, JWT issuer/audience/jwks-url). Secret with
+  the LLM API keys, JWT secrets if any, and observability API keys.
+  External secret management supported via `secrets.existingSecret`.
+- `NOTES.txt` with tailored post-install instructions (port-forward
+  commands, alembic migration command, demo seed command, auth-mode
+  summary, Postgres setup notes, observability status).
+- `helm/cascade/values-dev.yaml` — example override for local clusters
+  (kind, minikube, k3d): smaller resource requests, smaller Postgres
+  PVC, dev auth mode, wide-open CORS.
+- `helm/cascade/README.md` — chart-specific README covering quick
+  install, production overrides table, secret management modes, the
+  MCP-replica caveat, and the chart/app versioning split.
+- `scripts/validate_helm_chart.py` — Python-based structural validator
+  that runs without helm installed. Five checks:
+  - Chart.yaml has required keys (`apiVersion v2`, `name`, `version`,
+    `type`, `appVersion`)
+  - values.yaml has required top-level keys for everything the
+    templates reference
+  - Template files have balanced `{{- if/range/with/define -}}` blocks
+    and matching `{{ }}` braces
+  - Every `include "cascade.X"` call resolves to a `define
+    "cascade.X"` in `_helpers.tpl`
+  - Required template files exist
+- `tests/unit/test_helm_chart.py` — wraps the validator as a pytest
+  unit test so chart drift surfaces inside the standard test run, not
+  just in the helm-lint CI job.
+
+### Changed
+- **`.github/workflows/ci.yml::helm-lint`** — new job that runs `helm
+  lint helm/cascade/` and `helm template` against `values-dev.yaml`
+  on every PR. Uses `azure/setup-helm@v4` to install helm in the
+  runner. The structural validator catches most issues cheaply inside
+  pytest; this job is the authoritative check against real Helm.
+- Top-level README has a new "Production deployment" section pointing
+  at the chart with the install command spelled out. Sits between
+  "Quick start" and "Use it from Claude Desktop" so a reviewer
+  evaluating production-readiness finds it on the first scroll.
+
+### Tests
+- 443 total: 337 unit + 105 integration (all green); 1 e2e skipped
+  without keys
+- 1 new unit test (`test_helm_chart_passes_structural_validation`)
+  that invokes the validator and asserts no errors.
+
+### Design choices documented
+- **Chart version separate from app version.** `Chart.yaml::version`
+  is `0.1.0` (the chart's own version); `appVersion` is `0.18.0` (the
+  cascade release this chart deploys). A chart-only fix bumps the
+  chart patch without bumping appVersion. The chart README's
+  "Versioning" section codifies this.
+- **`mcp.replicaCount: 1` and `strategy: Recreate`.** The LangGraph
+  checkpointer holds state on a ReadWriteOnce PVC. Rolling updates
+  would deadlock on the volume mount during the transition; Recreate
+  avoids it at the cost of a brief downtime window. Horizontal
+  scaling needs a shared-state checkpointer (e.g. Postgres-backed) —
+  not yet implemented.
+- **Postgres as optional subchart, not required.** Local clusters get
+  a working install out of the box (`postgresql.enabled: true`).
+  Production deployments set `postgresql.enabled: false` and point
+  `externalDatabase.*` at managed Postgres (RDS, Cloud SQL). One
+  values file change toggles the entire deployment shape.
+- **Secret management has two modes.** Inline (`secrets.groqApiKey:
+  "..."`) is convenient for dev but lands values in release history;
+  external (`secrets.existingSecret: cascade-prod-secrets`)
+  references a Secret managed by sealed-secrets / ExternalSecrets /
+  Vault. The chart README enumerates required keys for both modes.
+- **Python validator alongside `helm lint`.** Helm isn't installed in
+  the dev venv (and the install URL is blocked from the build sandbox
+  used to author this release), so a cheap structural check that
+  doesn't need helm catches most drift inside the standard pytest
+  run. `helm lint` in CI remains the authoritative check.
+
 ## [0.17.0] - 2026-05-06
 
 ### Added
@@ -870,7 +974,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/Akash-1512/cascade/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Akash-1512/cascade/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Akash-1512/cascade/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Akash-1512/cascade/compare/v0.14.0...v0.15.0
