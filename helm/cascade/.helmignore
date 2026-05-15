@@ -1,0 +1,21 @@
+# Patterns to ignore when building Helm packages.
+# Keep this minimal — chart contents stay under this directory by
+# convention, so most exclusions are inherited from .gitignore at the
+# repo root.
+
+# VCS
+.git/
+.gitignore
+
+# Build artifacts
+*.tgz
+charts/
+
+# Helm itself
+.helmignore
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*.bak
+*.orig
