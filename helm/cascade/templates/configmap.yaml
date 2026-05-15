@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cascade.fullname" . }}-config
+  labels:
+    {{- include "cascade.labels" . | nindent 4 }}
+data:
+  # General
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+
+  # REST API
+  CASCADE_API_AUTH_MODE: {{ .Values.api.authMode | quote }}
+  CASCADE_API_CORS_ALLOW_ORIGINS: {{ join "," .Values.config.corsAllowOrigins | quote }}
+
+  # MCP server
+  CASCADE_MCP_HOST: "0.0.0.0"
+  CASCADE_MCP_PORT: {{ .Values.mcp.service.port | quote }}
+  CASCADE_MCP_CHECKPOINTER_PATH: {{ if .Values.mcp.checkpointer.persistence.enabled -}}
+    {{ .Values.mcp.checkpointer.path | quote }}
+  {{- else -}}
+    ":memory:"
+  {{- end }}
+
+  # Observability — secret-free settings only. API keys live in the Secret.
+  LANGSMITH_TRACING: {{ .Values.config.observability.langsmith.tracing | quote }}
+  LANGSMITH_PROJECT: {{ .Values.config.observability.langsmith.project | quote }}
+  LANGFUSE_HOST: {{ .Values.config.observability.langfuse.host | quote }}
+  CASCADE_MLFLOW_TRACKING_URI: {{ .Values.config.observability.mlflow.trackingUri | quote }}
+  CASCADE_MLFLOW_EXPERIMENT: {{ .Values.config.observability.mlflow.experiment | quote }}
+
+  # JWT — only iss/aud/jwks_url which aren't secret. Keys themselves are
+  # stored in the Secret only by convention; these public configs are fine
+  # in a ConfigMap.
+  CASCADE_API_JWKS_URL: {{ .Values.secrets.jwt.jwksUrl | quote }}
+  CASCADE_API_JWT_ISSUER: {{ .Values.secrets.jwt.issuer | quote }}
+  CASCADE_API_JWT_AUDIENCE: {{ .Values.secrets.jwt.audience | quote }}
