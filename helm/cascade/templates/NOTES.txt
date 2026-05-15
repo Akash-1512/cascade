@@ -1,0 +1,104 @@
+cascade {{ .Chart.AppVersion }} is installed in namespace "{{ .Release.Namespace }}".
+
+================================================================================
+
+Services exposed:
+
+  - API     {{ include "cascade.componentName" (dict "context" . "component" "api") }}:{{ .Values.api.service.port }}
+  - MCP     {{ include "cascade.componentName" (dict "context" . "component" "mcp") }}:{{ .Values.mcp.service.port }}
+  - UI      {{ include "cascade.componentName" (dict "context" . "component" "ui") }}:{{ .Values.ui.service.port }}
+
+================================================================================
+
+Quick port-forward to verify:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward \
+    svc/{{ include "cascade.componentName" (dict "context" . "component" "api") }} \
+    {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+
+Then:
+
+  curl http://localhost:{{ .Values.api.service.port }}/health
+  curl http://localhost:{{ .Values.api.service.port }}/v1/teams/.../okrs \
+    -H "Authorization: Bearer $(uuidgen)"
+
+================================================================================
+
+Auth mode: {{ .Values.api.authMode }}
+
+{{- if eq .Values.api.authMode "dev" }}
+
+  Dev mode: any UUID is accepted as a bearer token. Suitable for staging
+  or restricted-access clusters; switch to 'jwt' for production by
+  setting api.authMode=jwt and configuring secrets.jwt.* in values.yaml.
+
+{{- else if eq .Values.api.authMode "jwt" }}
+
+  JWT mode active. The API verifies bearer tokens against:
+    Issuer:    {{ .Values.secrets.jwt.issuer }}
+    Audience:  {{ .Values.secrets.jwt.audience }}
+    JWKS URL:  {{ .Values.secrets.jwt.jwksUrl }}
+
+  If any are blank, the API will return 503 for any authenticated
+  request — set them or revert to authMode: dev.
+
+{{- end }}
+
+================================================================================
+
+Postgres:
+{{- if .Values.postgresql.enabled }}
+
+  The chart installed Postgres as a subchart. Connection string is wired
+  into the API and MCP deployments via DATABASE_URL.
+
+  Run migrations against the in-cluster Postgres:
+
+    kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "cascade.componentName" (dict "context" . "component" "api") }} -- \
+      alembic upgrade head
+
+  Seed the demo dataset:
+
+    kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "cascade.componentName" (dict "context" . "component" "api") }} -- \
+      python -m cascade.scripts.seed_demo --verbose
+
+{{- else }}
+
+  Using external Postgres at {{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}.
+  Make sure migrations have been applied:
+
+    alembic upgrade head
+
+  And the demo seed (optional):
+
+    python -m cascade.scripts.seed_demo --verbose
+
+{{- end }}
+
+================================================================================
+
+Observability:
+
+{{- if .Values.config.observability.langsmith.tracing }}
+  - LangSmith → project {{ .Values.config.observability.langsmith.project }}
+{{- end }}
+{{- if .Values.secrets.langfusePublicKey }}
+  - Langfuse → {{ .Values.config.observability.langfuse.host }}
+{{- end }}
+{{- if .Values.config.observability.mlflow.trackingUri }}
+  - MLflow → {{ .Values.config.observability.mlflow.trackingUri }}
+{{- end }}
+
+If nothing is listed above, observability is disabled. See
+docs/runbooks/observability.md to enable.
+
+================================================================================
+
+Next steps:
+
+  1. Run alembic migrations (see above)
+  2. Seed demo data (see above)
+  3. Connect Claude Desktop to the MCP server (sse transport)
+  4. Visit the operator console at the UI service URL
+
+Full docs: https://github.com/Akash-1512/cascade
