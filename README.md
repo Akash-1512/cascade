@@ -149,6 +149,15 @@ at managed Postgres and use external Secret management. The chart's
 README walks through both modes. CI runs `helm lint` + `helm template`
 on every PR so the chart stays correct.
 
+The container image is published to GHCR on every release tag, built
+for `linux/amd64` and `linux/arm64`:
+
+```bash
+docker pull ghcr.io/akash-1512/cascade:0.20.0
+```
+
+Install the chart:
+
 ```bash
 helm dependency update helm/cascade/
 helm install cascade helm/cascade/ \

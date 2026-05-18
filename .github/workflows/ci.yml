@@ -170,6 +170,31 @@ jobs:
           test -s /tmp/rendered.yaml || (echo "Empty render output"; exit 1)
           echo "Rendered $(wc -l < /tmp/rendered.yaml) lines of YAML"
 
+  docker-build:
+    name: Docker image build (no push)
+    runs-on: ubuntu-latest
+    # Builds the cascade image on every PR to verify the Dockerfile
+    # stays in sync with the codebase. Push happens only on tag from
+    # release.yml — this job catches build-time regressions before
+    # they hit the release path.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push, single arch for speed)
+        # Single-arch build for PR speed. The release workflow's
+        # docker job does multi-arch (amd64+arm64). PR builds catch
+        # the same syntax + dependency errors at half the runtime.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: cascade:pr-${{ github.event.pull_request.number || 'main' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   build:
     name: Build distribution
     runs-on: ubuntu-latest
