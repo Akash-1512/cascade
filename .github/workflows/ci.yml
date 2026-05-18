@@ -82,7 +82,7 @@ jobs:
         run: pytest -m unit --cov=cascade --cov-report=xml --cov-report=term
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: coverage.xml
           fail_ci_if_error: false   # codecov outages don't gate merges
