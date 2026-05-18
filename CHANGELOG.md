@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-05-06
+
+### Added
+- **`EVALUATION.md`** at the repo root — the dedicated reviewer
+  walkthrough. Three reading depths (5 minutes, 30 minutes, 2 hours)
+  with a clear "what this verifies" framing for each. The 5-minute
+  path is a single `make evaluate` command; the 30-minute path adds
+  the demo seed and operator console; the 2-hour path adds
+  load-bearing code/test reading, ADRs, and (optional) real LLM and
+  cluster verification. Closes with a "what to look for" section
+  listing seven engineering-judgment signals a senior reviewer
+  recognises (decision tables, fail-quiet observability, read/mutate
+  split rationale, advisory mypy with named threshold,
+  body-override-defaults-to-principal, two-layer Helm validation,
+  conventional commits with rationale).
+- **`make evaluate`** — single-command reviewer entry point. Runs the
+  full setup-and-verify flow (install all extras → lint → unit tests
+  → integration tests → eval gate smoke test → Helm chart validator)
+  with a clear pass-or-fail summary at the end. No API keys, no
+  Docker, no Postgres required. Takes ~2 minutes on a modern laptop.
+  When all steps pass, prints a "next steps" hint pointing at
+  ARCHITECTURE.md, EVALUATION.md, and `make demo`.
+- "For reviewers" callout at the top of the README — first thing
+  anyone landing there sees. Points at `make evaluate`,
+  EVALUATION.md, and ARCHITECTURE.md so a stranger lands on the
+  right entry point in seconds.
+
+### Changed
+- **`make dev`** now installs `[dev,evals,ui,observability]` extras
+  (previously just `[dev,evals]`). The `[ui]` extra is required for
+  the streamlit UI tests; without it, `make test` fails on a fresh
+  clone. The `[observability]` extra is included for completeness
+  even though the observability tests don't strictly need it (they
+  mock via sys.modules). One install, every test green.
+- `make dev`'s `pre-commit install` is now `|| true` so a reviewer
+  without pre-commit installed (or running outside a git checkout)
+  doesn't fail at setup. Pre-commit remains the recommended
+  contributor workflow; it's just not gating reviewer evaluation.
+- README test count badge bumped 442 → 443 to match v0.18.0's new
+  helm chart unit test.
+
+### Removed
+- Stale draft `TESTING.md` that referenced make targets that never
+  existed (`make verify`, `make run-ui`, `make ci-rehearsal`). The
+  new `EVALUATION.md` covers the same territory using the working
+  `make evaluate` target — a single authoritative reviewer doc
+  beats two overlapping drafts where one is broken.
+
+### Why this release
+A senior tech reviewer cloning the repo wants to verify the project
+is real, complete, and built by someone with engineering judgment.
+The previous state had everything they needed — 18 release tags, 443
+tests, CI green, ARCHITECTURE.md with diagrams, three integration
+surfaces, observability, JWT auth, Helm chart — but the path to
+finding and running it required reading several docs and stitching
+together commands. v0.19.0 collapses that path into one command and
+one walkthrough document. The repo's engineering quality didn't
+change; the *discoverability* of it did.
+
+### Tests
+- 443 total, all green. No test surface change in this release —
+  pure reviewer-experience polish.
+- Local rehearsal of the full `make evaluate` flow passes every step.
+
+### Design choices documented
+- **`make evaluate` is opinionated, not flexible.** It runs every
+  check a reviewer would want in a fixed order with no flags. The
+  alternative (one Make target per check, reviewer picks) loses the
+  "one command, one signal" property that makes it useful. Power
+  users still have `make test-unit`, `make test-integration`, `make
+  lint`, etc.
+- **Eval gate runs in smoke-test mode for `make evaluate`.** Fake
+  models don't pass the F1 thresholds (drafting=0.33 vs 0.85
+  required); using exit code as the success signal would mislead
+  reviewers. Instead the target greps the harness output for "wrote
+  eval report", confirms the JSON is non-empty, and reports "eval
+  harness OK". Real eval-gate threshold runs happen in CI against
+  real models.
+- **EVALUATION.md targets three audiences at three depths.** Senior
+  reviewers don't have uniform time budgets; explicitly naming what
+  each depth verifies lets them stop reading once they're satisfied.
+  The 5-minute path is enough for an initial screen; the 2-hour
+  path is for a final-round technical interviewer.
+
 ## [0.18.0] - 2026-05-06
 
 ### Added
@@ -974,7 +1058,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/Akash-1512/cascade/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Akash-1512/cascade/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Akash-1512/cascade/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Akash-1512/cascade/compare/v0.15.0...v0.16.0
