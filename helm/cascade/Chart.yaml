@@ -1,0 +1,43 @@
+apiVersion: v2
+name: cascade
+description: |
+  cascade — OKR governance platform with multi-agent AI coaching and
+  organizational memory. Deploys three Python services (REST API, MCP
+  server, Streamlit operator console) with a Postgres dependency.
+
+# The chart version follows the application version's minor track:
+# chart-0.18.x covers app-0.18.x. Patch versions diverge — a chart-only
+# fix bumps chart.version without bumping appVersion.
+type: application
+version: 0.1.0
+appVersion: "0.18.0"
+
+home: https://github.com/Akash-1512/cascade
+sources:
+  - https://github.com/Akash-1512/cascade
+
+keywords:
+  - okr
+  - agents
+  - langgraph
+  - mcp
+  - rag
+  - llm
+
+maintainers:
+  - name: Akash Chaudhari
+    email: ag.chaudhari.1512@gmail.com
+
+# Postgres is required; pulled in as a subchart so a deployer doesn't have
+# to wire it separately for a baseline install. Production deployments
+# typically point at an existing managed Postgres and set
+# postgresql.enabled=false in values.yaml.
+dependencies:
+  - name: postgresql
+    version: "16.2.1"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+
+annotations:
+  category: AI/LLM
+  licenses: MIT

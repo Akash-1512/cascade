@@ -1,0 +1,240 @@
+# Default values for cascade.
+#
+# Every key is documented. Production deployments override what they need
+# and inherit the rest. Three sections worth understanding:
+#
+#   image        — common container image config; each service overrides via
+#                  .api.image, .mcp.image, .ui.image if needed (default: shared)
+#   secrets      — JWT/LLM keys. Either inline (dev) or external (vault, sealed
+#                  secrets); see existingSecret options on each.
+#   postgresql   — bitnami subchart; set .enabled=false to use external PG.
+
+# -- Shared image config -------------------------------------------------------
+
+image:
+  repository: ghcr.io/akash-1512/cascade
+  # appVersion in Chart.yaml is the default; override per-environment if
+  # rolling out canaries from a hashed tag.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Service-account shared across all three pods. Override roleBindings if
+# you need cross-namespace reads (e.g. for a centralised Postgres in a
+# different namespace).
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- REST API service ----------------------------------------------------------
+
+api:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ""    # falls back to .image.repository
+    tag: ""           # falls back to .image.tag
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  # Tune to your traffic. Defaults sized for a small team (~50 RPS peak).
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+
+  # Liveness and readiness use the /health and /health/ready endpoints
+  # that ship with the FastAPI app. Tune the probe intervals for your
+  # cluster's tolerances.
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  # Pass-through pod spec extensions.
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Auth mode: 'dev' accepts any UUID as bearer; 'jwt' verifies via JWKS.
+  # Set jwt config below when this is 'jwt'.
+  authMode: dev
+
+# -- MCP server ----------------------------------------------------------------
+
+mcp:
+  enabled: true
+  replicaCount: 1   # MCP server holds checkpointer state; scale horizontally
+                    # only after switching to a shared checkpointer backend.
+
+  image:
+    repository: ""
+    tag: ""
+
+  # MCP transport: 'stdio' (subprocess; not useful for K8s), 'sse', or
+  # 'streamable-http'. SSE is the standard for hosted MCP servers.
+  transport: sse
+
+  service:
+    type: ClusterIP
+    port: 8765
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+
+  # The LangGraph checkpointer needs persistent state so paused HITL
+  # drafts survive pod restarts. Set checkpointerPath to a file inside
+  # the volume; the default ':memory:' is for dev-only.
+  checkpointer:
+    # When persistence.enabled=true, a PVC is created and mounted at
+    # /var/lib/cascade with a SQLite file at /var/lib/cascade/checkpoint.db.
+    # When false, the checkpointer uses :memory: and paused drafts don't
+    # survive restarts (which is fine for ephemeral test clusters).
+    persistence:
+      enabled: true
+      size: 1Gi
+      storageClass: ""   # cluster default
+      accessMode: ReadWriteOnce
+    path: /var/lib/cascade/checkpoint.db
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Operator console (Streamlit) ----------------------------------------------
+
+ui:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ""
+    tag: ""
+
+  service:
+    type: ClusterIP
+    port: 8501
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Secrets -------------------------------------------------------------------
+
+# Inline secrets only for local/dev. Production deployments should set
+# existingSecret to a Secret managed out-of-band (External Secrets Operator,
+# sealed-secrets, Vault, etc.); the chart will reference it instead of
+# creating its own.
+secrets:
+  # When existingSecret is non-empty, no Secret is created by this chart;
+  # all secret references read from the named Secret.
+  existingSecret: ""
+
+  # Required for the LLM agents to work at all.
+  groqApiKey: ""
+
+  # Optional — together AI used as fallback when Groq is throttled.
+  togetherApiKey: ""
+
+  # JWT verification config (only required when api.authMode=jwt).
+  jwt:
+    jwksUrl: ""
+    issuer: ""
+    audience: ""
+
+  # Optional — observability backends.
+  langsmithApiKey: ""
+  langfusePublicKey: ""
+  langfuseSecretKey: ""
+
+# -- Non-secret config ---------------------------------------------------------
+
+config:
+  logLevel: INFO
+
+  # CORS allowlist for the REST API. Default '*' is fine for dev; tighten
+  # to your console's origin in production.
+  corsAllowOrigins:
+    - "*"
+
+  # Observability settings (see docs/runbooks/observability.md).
+  # All three are opt-in; when keys aren't set, instrumentation no-ops.
+  observability:
+    langsmith:
+      tracing: false
+      project: cascade
+    langfuse:
+      host: https://cloud.langfuse.com
+    mlflow:
+      trackingUri: ""
+      experiment: cascade-evals
+
+# -- Postgres subchart (optional) ----------------------------------------------
+
+# Set postgresql.enabled=false and configure externalDatabase to use an
+# existing managed Postgres (RDS, Cloud SQL, etc.). The subchart defaults
+# are sized for small-team self-hosted clusters; production deployments
+# almost always want a managed service.
+postgresql:
+  enabled: true
+  auth:
+    username: cascade
+    database: cascade
+    # When existingSecret is set, the subchart reads the password from
+    # there; otherwise it generates one and stores in its own Secret.
+    existingSecret: ""
+    # Inline password only for dev; not used when existingSecret is set.
+    password: cascade
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+
+# Used only when postgresql.enabled=false. host:port + secret name pointing
+# at the external Postgres.
+externalDatabase:
+  host: ""
+  port: 5432
+  database: cascade
+  user: cascade
+  existingSecret: ""
+  existingSecretPasswordKey: postgres-password
