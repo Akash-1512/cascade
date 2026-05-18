@@ -55,10 +55,19 @@ keeps the canonical reference next to the defaults — no chart-README drift.
 
 ### Image source
 
-Default image: `ghcr.io/akash-1512/cascade:{appVersion}`. The image isn't
-auto-built by the cascade CI yet; the chart assumes the image exists.
-Override `image.repository` to point at your own registry while the
-publish pipeline is being built.
+Default image: `ghcr.io/akash-1512/cascade:{appVersion}`. Published as a
+multi-arch (amd64 + arm64) image by the release workflow on every tag
+push — see `.github/workflows/release.yml::docker`. Pull tags follow the
+SemVer pattern (`0.20.0`, `0.20`, `0`) plus a rolling `latest`.
+
+```bash
+docker pull ghcr.io/akash-1512/cascade:0.20.0
+```
+
+For private forks or air-gapped deployments, override `image.repository`
+to point at your own registry; the chart accepts any image that exposes
+the same Python entrypoints (`uvicorn cascade.api.main:app`, `python -m
+cascade.mcp.server`, `streamlit run cascade/ui/app.py`).
 
 ### Secret management
 
