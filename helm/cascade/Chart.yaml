@@ -9,8 +9,8 @@ description: |
 # chart-0.18.x covers app-0.18.x. Patch versions diverge — a chart-only
 # fix bumps chart.version without bumping appVersion.
 type: application
-version: 0.1.0
-appVersion: "0.18.0"
+version: 0.1.1
+appVersion: "0.20.0"
 
 home: https://github.com/Akash-1512/cascade
 sources:

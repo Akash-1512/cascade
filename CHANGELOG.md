@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-05-06
+
+### Added
+- **Multi-arch Docker image published to GHCR.** The v0.18.0 Helm
+  chart referenced `ghcr.io/akash-1512/cascade` which didn't exist —
+  `helm install` would fail at image pull. v0.20.0 closes that gap.
+  Every tag push triggers a build for `linux/amd64` and `linux/arm64`
+  (Apple Silicon support for local dev) and publishes to
+  `ghcr.io/akash-1512/cascade:{version}` plus rolling `latest`.
+- **`docker-build` job in `.github/workflows/ci.yml`** — builds the
+  Dockerfile on every PR (no push, single-arch for speed) so build
+  regressions surface before they hit the release path. Uses
+  `actions/cache` via the GHA cache backend so subsequent builds
+  are fast.
+- **`docker` job in `.github/workflows/release.yml`** — runs on
+  every `v*.*.*` tag push. Uses `docker/setup-qemu-action` for arm64
+  emulation, `docker/setup-buildx-action` for the multi-arch build,
+  `docker/login-action` for ghcr.io auth via `GITHUB_TOKEN`,
+  `docker/metadata-action` to derive SemVer tags, and
+  `docker/build-push-action` for the actual build-and-push.
+- **`github-release` step now depends on the docker job** — release
+  notes can't publish until the image is up. The release notes also
+  gain a "Container image" section at the top with the exact
+  `docker pull` command for the tag.
+
+### Changed
+- **`Dockerfile` installs `[ui,observability]` extras.** Previously
+  installed only the base package, which meant the same image
+  couldn't serve as the UI container (no streamlit) or as a
+  langfuse/mlflow-instrumented container (modules degraded to
+  no-op). Now one image runs all three deployments cleanly.
+- **`Dockerfile` removes the image-level `HEALTHCHECK`.** The image
+  runs three different services (API, MCP, UI) and the `/health`
+  endpoint only exists on the API. A HEALTHCHECK there would either
+  be wrong for two of three services or duplicate Kubernetes
+  liveness/readiness probes that the Helm chart configures per
+  deployment. The chart's probes are authoritative.
+- **`Dockerfile` `EXPOSE` lists all three service ports** (8000 API,
+  8501 UI, 8765 MCP) for documentation; the actual bound port comes
+  from each container's `command:` at runtime.
+- **`Dockerfile` builder stage caches the `[ui,observability]`
+  transitive wheels** so the runtime stage's `pip install` runs
+  entirely offline (`--no-index --find-links=/wheels`). Hermetic and
+  reproducible: same input commit → byte-identical image.
+- **`helm/cascade/README.md::Image source` rewritten.** Previous
+  section called out "image isn't auto-built yet"; now documents the
+  publish pipeline, SemVer tag pattern, and the override path for
+  private forks.
+- **`helm/cascade/Chart.yaml`** — chart version `0.1.0 → 0.1.1`
+  (patch-level metadata bump per Helm semver convention; chart
+  templates didn't change). `appVersion` `0.18.0 → 0.20.0` to match
+  the published image.
+
+### Tests
+- 443 total, all green. No test surface change in this release —
+  pure deployment-shipability work.
+- Dockerfile wheel-build step rehearsed locally with `python -m
+  build` to confirm the pyproject + extras syntax is sound. The
+  actual multi-arch image build is verified in CI on the
+  `docker-build` job (and on the `docker` job at release time).
+
+### Design choices documented
+- **Multi-arch from day one.** Apple Silicon dev machines need
+  arm64 for local Helm-chart testing; production clusters are
+  almost always amd64. Building both at release time means
+  `docker pull` works everywhere without per-environment hacks.
+  Cost: ~3x build time over single-arch. Worth it.
+- **GITHUB_TOKEN for ghcr.io auth, not a manual PAT.** Repository
+  Actions get a scoped token that can push to packages owned by
+  the same org when `packages: write` permission is granted at the
+  job level. No manual secret rotation, no leaked tokens in chat.
+- **Same image for all three services.** The chart's per-deployment
+  `command:` overrides specify what each pod runs. The alternative
+  (three separate images) would triple the publish time and create
+  drift opportunities; one image with three entrypoints is the
+  right trade-off for this size of project.
+- **PR builds single-arch, release builds multi-arch.** PR runtime
+  matters more than PR thoroughness (the multi-arch build is
+  identical except for the QEMU emulation pass). Release time the
+  trade-off flips: thoroughness matters more than speed.
+- **Release notes include the docker pull command.** A reviewer
+  reading the release page should be able to run the image without
+  consulting another doc. Two lines, zero context-switching.
+
 ## [0.19.0] - 2026-05-06
 
 ### Added
@@ -1058,7 +1142,8 @@ changes — 275 tests still pass, lint and format clean.
 - Docker development stack
 - Architecture documentation skeleton
 
-[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/Akash-1512/cascade/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/Akash-1512/cascade/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Akash-1512/cascade/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Akash-1512/cascade/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Akash-1512/cascade/compare/v0.16.0...v0.17.0
