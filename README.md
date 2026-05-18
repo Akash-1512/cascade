@@ -6,9 +6,14 @@
   <a href="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Akash-1512/cascade/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12+-blue.svg">
-  <img alt="Tests: 442 passing" src="https://img.shields.io/badge/tests-442%20passing-brightgreen">
+  <img alt="Tests: 443 passing" src="https://img.shields.io/badge/tests-443%20passing-brightgreen">
   <img alt="MCP: 10 tools" src="https://img.shields.io/badge/MCP-10%20tools-blueviolet">
 </p>
+
+> **Evaluating this repo?** Run `make evaluate` (no API keys needed,
+> ~2 minutes) and read [EVALUATION.md](EVALUATION.md) for the
+> 5/30/120-minute reviewer paths. The system walkthrough with
+> diagrams is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 cascade is an OKR governance platform with multi-agent AI coaching and an
 organizational memory layer designed to outlive the people who built it. It
