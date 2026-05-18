@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format type test test-unit test-integration cov clean docker-up docker-down demo demo-reset
+.PHONY: help install dev evaluate lint format format-check type test test-unit test-integration cov clean docker-up docker-down demo demo-reset
 
 PYTHON ?= python3.12
 VENV   ?= .venv
@@ -11,11 +11,43 @@ install:  ## Create venv and install runtime dependencies
 	$(VENV)/bin/pip install --upgrade pip
 	$(VENV)/bin/pip install -e .
 
-dev:  ## Install with dev and eval extras + pre-commit hooks
+dev:  ## Install with all extras (dev + evals + ui + observability) and pre-commit hooks
 	$(PYTHON) -m venv $(VENV)
 	$(VENV)/bin/pip install --upgrade pip
-	$(VENV)/bin/pip install -e ".[dev,evals]"
-	$(VENV)/bin/pre-commit install
+	$(VENV)/bin/pip install -e ".[dev,evals,ui,observability]"
+	$(VENV)/bin/pre-commit install || true   # pre-commit is optional for reviewers
+
+evaluate:  ## Reviewer entry point — set up, run lint + tests + eval gate, print summary
+	@echo "==> cascade evaluate: setting up and running the full check"
+	@$(MAKE) -s dev
+	@echo ""
+	@echo "==> Lint"
+	@$(VENV)/bin/ruff check . && $(VENV)/bin/ruff format --check .
+	@echo ""
+	@echo "==> Unit tests"
+	@$(VENV)/bin/pytest -m unit --no-cov -q
+	@echo ""
+	@echo "==> Integration tests (SQLite override, no Postgres needed)"
+	@$(VENV)/bin/pytest -m integration --no-cov -q
+	@echo ""
+	@echo "==> Eval gate (with fakes — harness smoke test, no API keys)"
+	@$(VENV)/bin/python -m cascade.evals.gate --use-fakes --output /tmp/cascade-eval.json 2>&1 \
+		| grep -E "wrote eval report|eval gate" | tail -2 \
+		|| true
+	@test -s /tmp/cascade-eval.json && echo "    eval harness OK (fakes don't pass thresholds; that's expected)" \
+		|| (echo "    eval harness FAILED — no report written"; exit 1)
+	@echo ""
+	@echo "==> Helm chart structural validation"
+	@$(VENV)/bin/python scripts/validate_helm_chart.py
+	@echo ""
+	@echo "================================================================"
+	@echo "  cascade evaluate: PASSED"
+	@echo "================================================================"
+	@echo "  Next:"
+	@echo "    - Read ARCHITECTURE.md  (system walkthrough with diagrams)"
+	@echo "    - Read EVALUATION.md    (5 / 30 / 120 minute reviewer paths)"
+	@echo "    - make demo             (seed the database, run the console)"
+	@echo "================================================================"
 
 lint:  ## Run ruff lint
 	$(VENV)/bin/ruff check .
